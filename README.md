@@ -41,3 +41,7 @@ options pages, and other privileged APIs beyond the table above.
 
 Open the project in Xcode and run, or use the Run button in the app this chat lives in.
 Targets iOS 17+; no third-party dependencies.
+
+**CI:** the *Build IPA* workflow on the Actions tab builds a Release archive and uploads
+an unsigned `FocusLite.ipa` artifact on every push to `main` (and on demand via
+*Run workflow*). Re-sign it with your own certificate to install on a device.
