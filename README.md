@@ -45,3 +45,7 @@ Targets iOS 17+; no third-party dependencies.
 **CI:** the *Build IPA* workflow on the Actions tab builds a Release archive and uploads
 an unsigned `FocusLite.ipa` artifact on every push to `main` (and on demand via
 *Run workflow*). Re-sign it with your own certificate to install on a device.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
