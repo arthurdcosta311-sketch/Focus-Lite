@@ -17,10 +17,11 @@ enum Theme {
 struct BrowserView: View {
     @StateObject private var manager = TabManager()
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         Group {
-            if UIDevice.current.userInterfaceIdiom == .pad {
+            if UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular {
                 IPadBrowserLayout(manager: manager)
             } else {
                 PhoneBrowserLayout(manager: manager)
@@ -191,6 +192,7 @@ struct PhoneBrowserLayout: View {
     @ObservedObject var manager: TabManager
     @FocusState private var addressFocused: Bool
     @State private var showTrackerTip = false
+    @State private var availableWidth: CGFloat = 0
 
     var body: some View {
         ZStack {
@@ -221,7 +223,8 @@ struct PhoneBrowserLayout: View {
                 if let model = manager.activeTab?.model {
                     PhoneBottomBar(manager: manager, model: model,
                                    showTrackerTip: $showTrackerTip,
-                                   addressFocused: $addressFocused)
+                                   addressFocused: $addressFocused,
+                                   isWide: availableWidth >= 432)
                 }
             }
 
@@ -232,6 +235,14 @@ struct PhoneBrowserLayout: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: manager.showTabSwitcher)
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onChange(of: geo.size.width, initial: true) { _, width in
+                        availableWidth = width
+                    }
+            }
+        )
     }
 }
 
@@ -240,62 +251,52 @@ private struct PhoneBottomBar: View {
     @ObservedObject var model: BrowserModel
     @Binding var showTrackerTip: Bool
     var addressFocused: FocusState<Bool>.Binding
+    /// Wide phones (Plus/Max) fit everything on one row; narrower iPhones
+    /// stack the address field above the buttons so nothing overflows.
+    let isWide: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
-            Button {
-                withAnimation { manager.toggleIncognito() }
-            } label: {
-                Image(systemName: "eyeglasses")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(manager.isIncognito ? Theme.incognito : Color.white)
-            }
+        Group {
+            if isWide {
+                HStack(spacing: 10) {
+                    incognitoButton
+                    tabsButton
 
-            Button {
-                withAnimation { manager.showTabSwitcher = true }
-            } label: {
-                Image(systemName: "square.on.square")
-                    .font(.system(size: 15, weight: .semibold))
-                    .overlay(alignment: .topTrailing) {
-                        if manager.tabs.count > 1 {
-                            Text("\(manager.tabs.count)")
-                                .font(.system(size: 9, weight: .bold, design: .rounded))
-                                .foregroundStyle(Theme.deepIndigo)
-                                .padding(3)
-                                .background(Theme.accent, in: Circle())
-                                .offset(x: 7, y: -5)
-                        }
+                    if !model.isStart {
+                        backButton
                     }
-            }
 
-            if !model.isStart {
-                Button(action: model.goBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 15, weight: .semibold))
+                    AddressField(model: model, showTrackerTip: $showTrackerTip,
+                                 addressFocused: addressFocused)
+
+                    if !model.isStart {
+                        reloadButton
+                    }
+
+                    eraseButton
+                    settingsButton
                 }
-                .disabled(!model.canGoBack)
-                .opacity(model.canGoBack ? 1 : 0.3)
-            }
+            } else {
+                VStack(spacing: 10) {
+                    AddressField(model: model, showTrackerTip: $showTrackerTip,
+                                 addressFocused: addressFocused)
 
-            AddressField(model: model, showTrackerTip: $showTrackerTip,
-                         addressFocused: addressFocused)
+                    HStack(spacing: 18) {
+                        incognitoButton
+                        tabsButton
 
-            if !model.isStart {
-                Button(action: model.toggleReload) {
-                    Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise")
-                        .font(.system(size: 15, weight: .semibold))
+                        if !model.isStart {
+                            backButton
+                        }
+
+                        if !model.isStart {
+                            reloadButton
+                        }
+
+                        eraseButton
+                        settingsButton
+                    }
                 }
-            }
-
-            Button(action: manager.erase) {
-                Image(systemName: "trash")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
-            }
-
-            Button { manager.showSettings = true } label: {
-                Image(systemName: "puzzlepiece.extension")
-                    .font(.system(size: 15, weight: .semibold))
             }
         }
         .foregroundStyle(.white)
@@ -310,6 +311,66 @@ private struct PhoneBottomBar: View {
         .shadow(color: .black.opacity(0.35), radius: 12, y: 4)
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
+    }
+
+    private var incognitoButton: some View {
+        Button {
+            withAnimation { manager.toggleIncognito() }
+        } label: {
+            Image(systemName: "eyeglasses")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(manager.isIncognito ? Theme.incognito : Color.white)
+        }
+    }
+
+    private var tabsButton: some View {
+        Button {
+            withAnimation { manager.showTabSwitcher = true }
+        } label: {
+            Image(systemName: "square.on.square")
+                .font(.system(size: 15, weight: .semibold))
+                .overlay(alignment: .topTrailing) {
+                    if manager.tabs.count > 1 {
+                        Text("\(manager.tabs.count)")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(Theme.deepIndigo)
+                            .padding(3)
+                            .background(Theme.accent, in: Circle())
+                            .offset(x: 7, y: -5)
+                    }
+                }
+        }
+    }
+
+    private var backButton: some View {
+        Button(action: model.goBack) {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 15, weight: .semibold))
+        }
+        .disabled(!model.canGoBack)
+        .opacity(model.canGoBack ? 1 : 0.3)
+    }
+
+    private var reloadButton: some View {
+        Button(action: model.toggleReload) {
+            Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise")
+                .font(.system(size: 15, weight: .semibold))
+        }
+    }
+
+    private var eraseButton: some View {
+        Button(action: manager.erase) {
+            Image(systemName: "trash")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.accent)
+        }
+    }
+
+    private var settingsButton: some View {
+        Button { manager.showSettings = true } label: {
+            Image(systemName: "puzzlepiece.extension")
+                .font(.system(size: 15, weight: .semibold))
+        }
     }
 }
 
