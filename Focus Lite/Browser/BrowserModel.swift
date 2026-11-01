@@ -32,6 +32,7 @@ final class BrowserModel: NSObject, ObservableObject {
 
     private let bridge = ExtensionBridge()
     private var backgroundWebView: WKWebView?
+    private var registeredExtensionWorldNames: Set<String> = []
     private var cancellables: Set<AnyCancellable> = []
     private var previewGeneration = 0
 
@@ -39,7 +40,6 @@ final class BrowserModel: NSObject, ObservableObject {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore
         let controller = WKUserContentController()
-        controller.add(bridge, contentWorld: .page, name: ExtensionBridge.handlerName)
         configuration.userContentController = controller
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
@@ -50,40 +50,53 @@ final class BrowserModel: NSObject, ObservableObject {
         TrackerBlocker.install(into: controller)
         refreshExtensions()
         observeWebView()
-        prepareBackgroundHost()
     }
 
     // MARK: - Extension wiring
 
-    /// (Re)installs the shared API factory and every enabled extension's
-    /// content scripts. Takes effect on the next page load.
+    /// (Re)installs each enabled extension's isolated-world API and content
+    /// scripts. Changes take effect on the next page load.
     func refreshExtensions() {
         let controller = webView.configuration.userContentController
         controller.removeAllUserScripts()
-        controller.addUserScript(WKUserScript(
-            source: ExtensionBridge.factoryScript,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true,
-            in: .page
-        ))
-        // Only pages that will actually run a Lua extension pay the cost of
-        // loading the embedded Lua VM.
-        if ExtensionManager.shared.usesLua {
+        for worldName in registeredExtensionWorldNames {
+            controller.removeScriptMessageHandler(
+                forName: ExtensionBridge.handlerName,
+                contentWorld: .world(name: worldName)
+            )
+        }
+        registeredExtensionWorldNames.removeAll()
+
+        for ext in ExtensionManager.shared.extensions where ExtensionManager.shared.isEnabled(ext.id) {
+            let world = ExtensionBridge.contentWorld(for: ext.id)
+            controller.add(bridge, contentWorld: world, name: ExtensionBridge.handlerName)
+            registeredExtensionWorldNames.insert(ExtensionBridge.contentWorldName(for: ext.id))
             controller.addUserScript(WKUserScript(
-                source: LuaBridge.preloadScript,
+                source: ExtensionBridge.factoryScript,
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: true,
-                in: .page
+                in: world
             ))
-        }
-        for ext in ExtensionManager.shared.extensions where ExtensionManager.shared.isEnabled(ext.id) {
+
+            let hasLua = ext.contentScripts.contains { spec in
+                spec.scripts.contains { $0.hasPrefix(LuaBridge.luaBootstrapMarker) }
+            }
+            if hasLua {
+                controller.addUserScript(WKUserScript(
+                    source: LuaBridge.preloadScript,
+                    injectionTime: .atDocumentStart,
+                    forMainFrameOnly: true,
+                    in: world
+                ))
+            }
+
             for spec in ext.contentScripts {
                 for source in spec.scripts {
                     controller.addUserScript(WKUserScript(
                         source: ExtensionBridge.wrapped(source: source, extId: ext.id, patterns: spec.matches),
                         injectionTime: spec.runAtDocumentStart ? .atDocumentStart : .atDocumentEnd,
                         forMainFrameOnly: true,
-                        in: .page
+                        in: world
                     ))
                 }
                 for css in spec.cssSources {
@@ -91,19 +104,15 @@ final class BrowserModel: NSObject, ObservableObject {
                         source: ExtensionBridge.wrappedCSS(source: css, extId: ext.id, patterns: spec.matches),
                         injectionTime: spec.runAtDocumentStart ? .atDocumentStart : .atDocumentEnd,
                         forMainFrameOnly: true,
-                        in: .page
+                        in: world
                     ))
                 }
             }
         }
+
+        releaseBackgroundHost()
         if hasEnabledBackgroundScripts {
-            if let background = backgroundWebView {
-                installBackgroundScripts(in: background)
-            } else {
-                prepareBackgroundHost()
-            }
-        } else {
-            releaseBackgroundHost()
+            prepareBackgroundHost()
         }
     }
 
@@ -117,8 +126,13 @@ final class BrowserModel: NSObject, ObservableObject {
         guard backgroundWebView == nil, hasEnabledBackgroundScripts else { return }
 
         let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = webView.configuration.websiteDataStore
         let controller = WKUserContentController()
-        controller.add(bridge, contentWorld: .page, name: ExtensionBridge.handlerName)
+        for ext in ExtensionManager.shared.extensions
+        where ExtensionManager.shared.isEnabled(ext.id) && !ext.backgroundScripts.isEmpty {
+            controller.add(bridge, contentWorld: ExtensionBridge.contentWorld(for: ext.id),
+                           name: ExtensionBridge.handlerName)
+        }
         configuration.userContentController = controller
         let host = WKWebView(frame: CGRect(x: 0, y: 0, width: 1, height: 1), configuration: configuration)
         host.navigationDelegate = self
@@ -136,16 +150,22 @@ final class BrowserModel: NSObject, ObservableObject {
     }
 
     private func installBackgroundScripts(in host: WKWebView) {
-        var sources = [ExtensionBridge.factoryScript]
-        if ExtensionManager.shared.usesLua {
-            sources.append(LuaBridge.preloadScript)
-        }
-        for ext in ExtensionManager.shared.extensions where ExtensionManager.shared.isEnabled(ext.id) {
-            for source in ext.backgroundScripts {
-                sources.append(ExtensionBridge.wrapped(source: source, extId: ext.id, patterns: ["<all_urls>"]))
+        for ext in ExtensionManager.shared.extensions
+        where ExtensionManager.shared.isEnabled(ext.id) && !ext.backgroundScripts.isEmpty {
+            var sources = [ExtensionBridge.factoryScript]
+            if ext.backgroundScripts.contains(where: { $0.hasPrefix(LuaBridge.luaBootstrapMarker) }) {
+                sources.append(LuaBridge.preloadScript)
             }
+            sources.append(contentsOf: ext.backgroundScripts.map {
+                ExtensionBridge.wrapped(source: $0, extId: ext.id, patterns: ["<all_urls>"])
+            })
+            host.evaluateJavaScript(
+                sources.joined(separator: "\n"),
+                in: nil,
+                in: ExtensionBridge.contentWorld(for: ext.id),
+                completionHandler: nil
+            )
         }
-        host.evaluateJavaScript(sources.joined(separator: "\n"), in: nil, in: .page, completionHandler: nil)
     }
 
     // MARK: - Navigation

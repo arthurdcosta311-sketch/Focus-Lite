@@ -7,9 +7,17 @@ import Foundation
 import WebKit
 
 /// Bridges a lightweight `browser` / `chrome` WebExtensions API between
-/// content scripts (page world), the app, and per-extension background scripts.
+/// isolated per-extension content/background worlds and the app.
 final class ExtensionBridge: NSObject, WKScriptMessageHandler {
     static let handlerName = "__focusExt"
+
+    static func contentWorldName(for extId: String) -> String {
+        "FocusLite.Extension.\(extId)"
+    }
+
+    static func contentWorld(for extId: String) -> WKContentWorld {
+        .world(name: contentWorldName(for: extId))
+    }
 
     weak var pageWebView: WKWebView?
     weak var backgroundWebView: WKWebView?
@@ -260,11 +268,12 @@ final class ExtensionBridge: NSObject, WKScriptMessageHandler {
 
     private func deliver(_ envelope: [String: Any], to webView: WKWebView?) {
         guard let webView,
+              let extId = envelope["ext"] as? String,
               JSONSerialization.isValidJSONObject(envelope),
               let data = try? JSONSerialization.data(withJSONObject: envelope),
               let json = String(data: data, encoding: .utf8) else { return }
         let base64 = Data(json.utf8).base64EncodedString()
         let js = "window.__focusExtDispatch(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob('\(base64)'), function (c) { return c.charCodeAt(0); }))));"
-        webView.evaluateJavaScript(js, in: nil, in: .page, completionHandler: nil)
+        webView.evaluateJavaScript(js, in: nil, in: Self.contentWorld(for: extId), completionHandler: nil)
     }
 }

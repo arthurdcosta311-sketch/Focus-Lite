@@ -42,17 +42,6 @@ final class ExtensionManager: ObservableObject {
         enabledIDs = ids
     }
 
-    /// True when any enabled extension ships a Lua script, so the hosts know
-    /// to preload the Lua runtime before the extension scripts.
-    var usesLua: Bool {
-        let marker = LuaBridge.luaBootstrapMarker
-        return extensions.contains { ext in
-            guard isEnabled(ext.id) else { return false }
-            if ext.backgroundScripts.contains(where: { $0.hasPrefix(marker) }) { return true }
-            return ext.contentScripts.contains { $0.scripts.contains { $0.hasPrefix(marker) } }
-        }
-    }
-
     init() {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         extensionsDirectory = documents.appendingPathComponent("Extensions", isDirectory: true)

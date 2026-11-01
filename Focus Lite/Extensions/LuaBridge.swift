@@ -6,9 +6,8 @@
 import Foundation
 
 /// Embeds a real Lua 5.3 VM (fengari — a Lua VM written in pure JavaScript,
-/// https://github.com/fengari-lua/fengari) into the page's JavaScript world,
-/// so extension scripts written in `.lua` files run against the same
-/// WebExtensions bridge that JavaScript extensions use.
+/// https://github.com/fengari-lua/fengari) into each extension's isolated
+/// JavaScript world, so `.lua` scripts use the same WebExtensions bridge as JS.
 ///
 /// Two pieces ship here:
 /// - `preloadScript`: the fengari browser bundle plus a shim that exposes a
@@ -35,9 +34,8 @@ enum LuaBridge {
         return String(json.dropFirst().dropLast())
     }
 
-    /// fengari plus the `focus` shim, injected once per JavaScript world
-    /// (page world and background host world alike); guarded so re-injection
-    /// after a rescan is a no-op.
+    /// fengari plus the `focus` shim, injected once into an extension's
+    /// isolated JavaScript world in either the page or background host.
     static var preloadScript: String {
         guard let url = Bundle.main.url(forResource: "fengari-web", withExtension: "js"),
               let bundle = try? String(contentsOf: url, encoding: .utf8) else {
