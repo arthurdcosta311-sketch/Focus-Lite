@@ -14,25 +14,21 @@ final class BrowserModel: NSObject, ObservableObject {
     @Published var isLoading = false
     @Published var canGoBack = false
     @Published var trackersSeen = 0
-    @Published var pagesVisited = 0
-    @Published var erasures = 0
-    @Published var showErasedToast = false
-    @Published var showSettings = false
     @Published var isStart = true
-    @Published var isIncognito = false
-    @Published var showIncognitoToast = false
-    @Published var incognitoToastText = ""
+
+    /// Called on the main thread each time a page finishes loading, so the
+    /// tab manager can keep session-wide stats.
+    var onPageLoaded: (() -> Void)?
 
     let webView: WKWebView
 
     private let bridge = ExtensionBridge()
     private var backgroundWebView: WKWebView?
     private var cancellables: Set<AnyCancellable> = []
-    private var incognitoToastWorkItem: DispatchWorkItem?
 
-    override init() {
+    init(dataStore: WKWebsiteDataStore = .nonPersistent()) {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
+        configuration.websiteDataStore = dataStore
         let controller = WKUserContentController()
         controller.add(bridge, contentWorld: .page, name: ExtensionBridge.handlerName)
         configuration.userContentController = controller
@@ -143,36 +139,10 @@ final class BrowserModel: NSObject, ObservableObject {
         webView.goBack()
     }
 
-    /// Focus-style erase: wipe the session and everything the data store holds.
-    func erase() {
-        wipeSession()
-        erasures += 1
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showErasedToast = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { [weak self] in
-            withAnimation(.easeOut(duration: 0.25)) { self?.showErasedToast = false }
-        }
-    }
-
-    // MARK: - Incognito mode
-
-    /// Toggles incognito mode. Either way the current session is wiped, so the
-    /// next pages load in a fresh ephemeral data store.
-    func toggleIncognito() {
-        isIncognito.toggle()
-        wipeSession()
-        incognitoToastText = isIncognito ? "Incognito on — nothing is saved" : "Incognito off"
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showIncognitoToast = true }
-        incognitoToastWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            withAnimation(.easeOut(duration: 0.25)) { self?.showIncognitoToast = false }
-        }
-        incognitoToastWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4, execute: work)
-    }
-
-    /// Stop browsing, drop everything the data store holds and return to the
-    /// start screen.
-    private func wipeSession() {
+    /// Reset this tab: stop loading, drop everything the data store holds and
+    /// return to the start screen. The tab manager calls this when the session
+    /// is erased or incognito mode switches.
+    func wipeSession() {
         webView.stopLoading()
         webView.load(URLRequest(url: URL(string: "about:blank")!))
         webView.configuration.websiteDataStore.removeData(
@@ -236,7 +206,7 @@ extension BrowserModel: WKNavigationDelegate {
         guard let url = webView.url, url.absoluteString != "about:blank" else { return }
         displayedURL = url
         isLoading = false
-        pagesVisited += 1
+        onPageLoaded?()
         auditTrackers()
     }
 
@@ -245,7 +215,7 @@ extension BrowserModel: WKNavigationDelegate {
         isLoading = false
     }
 
-    /// Keep popups and target=_blank links in this single-tab browser.
+    /// Keep popups and target=_blank links inside the tab that opened them.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if navigationAction.targetFrame == nil {

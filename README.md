@@ -10,6 +10,12 @@ lightweight engine that runs **Chrome-style extensions**.
 - **Incognito mode** — a toggle (glasses button in the bar, or in Settings) that tints
   the interface, shows an "Incognito" pill, hides page content in the app switcher, and
   wipes the session whenever you turn it on or off.
+- **Tabs** — browse in multiple tabs. On iPhone the squares button opens a tab
+  grid (open, switch, close, close all); on iPad the sidebar lists them. All
+  tabs share one ephemeral data store, and erasing or toggling incognito drops
+  them all.
+- **iPad layout** — on iPad the browser switches to a large-screen layout: a
+  tab sidebar beside the page, with the controls in a toolbar above the content.
 - **Tracker blocking** — a WebKit content rule list blocks requests to ~35 well-known
   advertising and analytics domains. The shield in the address bar shows how many
   tracking resources a page attempted to load.

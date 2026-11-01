@@ -5,6 +5,7 @@
 
 import SwiftUI
 import WebKit
+import UIKit
 
 enum Theme {
     static let accent = Color(red: 1.0, green: 0.545, blue: 0.235)
@@ -14,68 +15,80 @@ enum Theme {
 }
 
 struct BrowserView: View {
-    @StateObject private var model = BrowserModel()
+    @StateObject private var manager = TabManager()
     @Environment(\.scenePhase) private var scenePhase
-    @FocusState private var addressFocused: Bool
-    @State private var showTrackerTip = false
 
     var body: some View {
-        ZStack {
-            (model.isIncognito ? Theme.incognitoDeep : Theme.deepIndigo)
-                .ignoresSafeArea()
-
-            if model.isStart {
-                StartScreen(model: model)
-                    .transition(.opacity)
+        Group {
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                IPadBrowserLayout(manager: manager)
             } else {
-                WebViewContainer(webView: model.webView)
-                    .ignoresSafeArea(edges: [.top, .bottom])
-                    .transition(.opacity)
+                PhoneBrowserLayout(manager: manager)
             }
-
-            VStack(spacing: 8) {
-                progressBar
-                    .padding(.horizontal, 16)
-                    .padding(.top, 2)
-                if model.isIncognito {
-                    incognitoPill
-                }
-                Spacer()
-                if showTrackerTip {
-                    trackerTip
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 8)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-                if model.showErasedToast {
-                    StatusToast(text: "Browsing data erased")
-                        .padding(.bottom, 8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                if model.showIncognitoToast {
-                    StatusToast(text: model.incognitoToastText, symbol: "eyeglasses")
-                        .padding(.bottom, 8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                bottomBar
-            }
-
-            if model.isIncognito && scenePhase != .active {
+        }
+        .background(
+            (manager.isIncognito ? Theme.incognitoDeep : Theme.deepIndigo)
+                .ignoresSafeArea()
+        )
+        .overlay {
+            if manager.isIncognito && scenePhase != .active {
                 IncognitoPrivacyScreen()
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: model.isStart)
-        .animation(.easeInOut(duration: 0.25), value: model.isIncognito)
-        .sheet(isPresented: $model.showSettings) {
-            SettingsSheet(model: model)
+        .animation(.easeInOut(duration: 0.25), value: manager.isIncognito)
+        .sheet(isPresented: $manager.showSettings) {
+            SettingsSheet(manager: manager)
         }
         .preferredColorScheme(.dark)
     }
+}
 
-    // MARK: Pieces
+// MARK: - Tab content
 
-    private var progressBar: some View {
+/// Every tab's web view stays mounted so pages keep their state across tab
+/// switches; only the active tab is visible and interactive.
+struct TabContentView: View {
+    @ObservedObject var manager: TabManager
+
+    var body: some View {
+        ZStack {
+            ForEach(manager.tabs) { tab in
+                WebViewContainer(webView: tab.model.webView)
+                    .ignoresSafeArea(edges: [.top, .bottom])
+                    .opacity(tab.id == manager.activeTabID ? 1 : 0)
+                    .allowsHitTesting(tab.id == manager.activeTabID)
+            }
+            if let active = manager.activeTab {
+                StartOverlay(model: active.model, incognito: manager.isIncognito)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: manager.activeTabID)
+    }
+}
+
+private struct StartOverlay: View {
+    @ObservedObject var model: BrowserModel
+    let incognito: Bool
+
+    var body: some View {
+        if model.isStart {
+            ZStack {
+                (incognito ? Theme.incognitoDeep : Theme.deepIndigo)
+                    .ignoresSafeArea()
+                StartScreen(model: model)
+            }
+            .transition(.opacity)
+        }
+    }
+}
+
+// MARK: - Shared chrome pieces
+
+struct ProgressBar: View {
+    @ObservedObject var model: BrowserModel
+
+    var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(.white.opacity(0.08))
@@ -89,8 +102,12 @@ struct BrowserView: View {
         .frame(height: 3)
         .animation(.linear(duration: 0.15), value: model.progress)
     }
+}
 
-    private var trackerTip: some View {
+struct TrackerTip: View {
+    @ObservedObject var model: BrowserModel
+
+    var body: some View {
         Text(model.trackersSeen > 0
              ? "\(model.trackersSeen) tracking resource\(model.trackersSeen == 1 ? "" : "s") seen on this page — known trackers are blocked by the engine."
              : "No trackers seen on this page. Known trackers are blocked by the engine.")
@@ -99,10 +116,11 @@ struct BrowserView: View {
             .padding(10)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .frame(maxWidth: 320)
-            .onTapGesture { withAnimation { showTrackerTip = false } }
     }
+}
 
-    private var incognitoPill: some View {
+struct IncognitoPill: View {
+    var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "eyeglasses")
             Text("Incognito")
@@ -113,15 +131,141 @@ struct BrowserView: View {
         .padding(.vertical, 4)
         .background(Theme.incognito.opacity(0.15), in: Capsule())
     }
+}
 
-    private var bottomBar: some View {
+struct AddressField: View {
+    @ObservedObject var model: BrowserModel
+    @Binding var showTrackerTip: Bool
+    var addressFocused: FocusState<Bool>.Binding
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button { withAnimation { showTrackerTip.toggle() } } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "shield.lefthalf.filled")
+                        .font(.system(size: 12, weight: .bold))
+                    if model.trackersSeen > 0 {
+                        Text("\(model.trackersSeen)")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                    }
+                }
+                .foregroundStyle(model.trackersSeen > 0 ? Theme.accent : Color.secondary)
+            }
+
+            TextField("Search or enter address", text: $model.addressText)
+                .textFieldStyle(.plain)
+                .submitLabel(.go)
+                .focused(addressFocused)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+                .onSubmit {
+                    model.load(model.addressText)
+                    addressFocused.wrappedValue = false
+                }
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") { addressFocused.wrappedValue = false }
+                    }
+                }
+
+            if addressFocused.wrappedValue && !model.addressText.isEmpty {
+                Button {
+                    model.addressText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.white.opacity(0.08), in: Capsule())
+    }
+}
+
+// MARK: - Phone layout
+
+struct PhoneBrowserLayout: View {
+    @ObservedObject var manager: TabManager
+    @FocusState private var addressFocused: Bool
+    @State private var showTrackerTip = false
+
+    var body: some View {
+        ZStack {
+            TabContentView(manager: manager)
+
+            VStack(spacing: 8) {
+                if let model = manager.activeTab?.model {
+                    ProgressBar(model: model)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 2)
+                }
+                if manager.isIncognito {
+                    IncognitoPill()
+                }
+                Spacer()
+                if showTrackerTip, let model = manager.activeTab?.model {
+                    TrackerTip(model: model)
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 8)
+                        .onTapGesture { withAnimation { showTrackerTip = false } }
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+                if let toastText = manager.toastText {
+                    StatusToast(text: toastText, symbol: manager.toastSymbol)
+                        .padding(.bottom, 8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                if let model = manager.activeTab?.model {
+                    PhoneBottomBar(manager: manager, model: model,
+                                   showTrackerTip: $showTrackerTip,
+                                   addressFocused: $addressFocused)
+                }
+            }
+
+            if manager.showTabSwitcher {
+                TabSwitcher(manager: manager)
+                    .transition(.opacity)
+                    .zIndex(1)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: manager.showTabSwitcher)
+    }
+}
+
+private struct PhoneBottomBar: View {
+    @ObservedObject var manager: TabManager
+    @ObservedObject var model: BrowserModel
+    @Binding var showTrackerTip: Bool
+    var addressFocused: FocusState<Bool>.Binding
+
+    var body: some View {
         HStack(spacing: 10) {
             Button {
-                withAnimation { model.toggleIncognito() }
+                withAnimation { manager.toggleIncognito() }
             } label: {
                 Image(systemName: "eyeglasses")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(model.isIncognito ? Theme.incognito : Color.white)
+                    .foregroundStyle(manager.isIncognito ? Theme.incognito : Color.white)
+            }
+
+            Button {
+                withAnimation { manager.showTabSwitcher = true }
+            } label: {
+                Image(systemName: "square.on.square")
+                    .font(.system(size: 15, weight: .semibold))
+                    .overlay(alignment: .topTrailing) {
+                        if manager.tabs.count > 1 {
+                            Text("\(manager.tabs.count)")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .foregroundStyle(Theme.deepIndigo)
+                                .padding(3)
+                                .background(Theme.accent, in: Circle())
+                                .offset(x: 7, y: -5)
+                        }
+                    }
             }
 
             if !model.isStart {
@@ -133,7 +277,8 @@ struct BrowserView: View {
                 .opacity(model.canGoBack ? 1 : 0.3)
             }
 
-            addressField
+            AddressField(model: model, showTrackerTip: $showTrackerTip,
+                         addressFocused: addressFocused)
 
             if !model.isStart {
                 Button(action: model.toggleReload) {
@@ -142,13 +287,13 @@ struct BrowserView: View {
                 }
             }
 
-            Button(action: model.erase) {
+            Button(action: manager.erase) {
                 Image(systemName: "trash")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.accent)
             }
 
-            Button { model.showSettings = true } label: {
+            Button { manager.showSettings = true } label: {
                 Image(systemName: "puzzlepiece.extension")
                     .font(.system(size: 15, weight: .semibold))
             }
@@ -166,51 +311,118 @@ struct BrowserView: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
     }
+}
 
-    private var addressField: some View {
-        HStack(spacing: 6) {
-            Button { withAnimation { showTrackerTip.toggle() } } label: {
-                HStack(spacing: 3) {
-                    Image(systemName: "shield.lefthalf.filled")
-                        .font(.system(size: 12, weight: .bold))
-                    if model.trackersSeen > 0 {
-                        Text("\(model.trackersSeen)")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
+// MARK: - Tab switcher (iPhone)
+
+private struct TabSwitcher: View {
+    @ObservedObject var manager: TabManager
+
+    var body: some View {
+        ZStack {
+            (manager.isIncognito ? Theme.incognitoDeep : Theme.deepIndigo)
+                .ignoresSafeArea()
+                .opacity(0.98)
+
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    Text("\(manager.tabs.count) tab\(manager.tabs.count == 1 ? "" : "s")")
+                        .font(.title3.bold())
+                    Spacer()
+                    Button(role: .destructive) {
+                        withAnimation { manager.erase() }
+                        manager.showTabSwitcher = false
+                    } label: {
+                        Text("Close All")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.red)
+                    }
+                    Button {
+                        withAnimation { _ = manager.addTab() }
+                        manager.showTabSwitcher = false
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                            .background(Color.white.opacity(0.08), in: Circle())
+                    }
+                    Button {
+                        manager.showTabSwitcher = false
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                            .background(Color.white.opacity(0.08), in: Circle())
                     }
                 }
-                .foregroundStyle(model.trackersSeen > 0 ? Theme.accent : Color.secondary)
-            }
+                .foregroundStyle(.white)
 
-            TextField("Search or enter address", text: $model.addressText)
-                .textFieldStyle(.plain)
-                .submitLabel(.go)
-                .focused($addressFocused)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
-                .onSubmit {
-                    model.load(model.addressText)
-                    addressFocused = false
-                }
-                .toolbar {
-                    ToolbarItemGroup(placement: .keyboard) {
-                        Spacer()
-                        Button("Done") { addressFocused = false }
+                ScrollView(showsIndicators: false) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)],
+                              spacing: 12) {
+                        ForEach(manager.tabs) { tab in
+                            TabCard(manager: manager, model: tab.model, tabID: tab.id)
+                        }
                     }
                 }
-
-            if addressFocused && !model.addressText.isEmpty {
-                Button {
-                    model.addressText = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
             }
+            .padding()
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background(Color.white.opacity(0.08), in: Capsule())
+    }
+}
+
+private struct TabCard: View {
+    @ObservedObject var manager: TabManager
+    @ObservedObject var model: BrowserModel
+    let tabID: Tab.ID
+
+    private var isActive: Bool { tabID == manager.activeTabID }
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: 8) {
+                Image(systemName: model.isStart ? "shield.lefthalf.filled" : "globe")
+                    .font(.system(size: 18))
+                    .foregroundStyle(isActive ? Theme.accent : Color.secondary)
+                Text(model.displayedURL?.host ?? "Start Page")
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Text(model.displayedURL?.absoluteString ?? "Nothing loaded yet")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(isActive ? 0.14 : 0.07))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(
+                        isActive ? Theme.accent.opacity(0.6) : Color.white.opacity(0.08),
+                        lineWidth: isActive ? 2 : 1
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .onTapGesture {
+                withAnimation {
+                    manager.select(tabID)
+                    manager.showTabSwitcher = false
+                }
+            }
+
+            Button {
+                withAnimation { manager.close(tabID) }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+            .offset(x: 6, y: -6)
+        }
+        .frame(height: 108)
     }
 }
 
@@ -290,7 +502,7 @@ private struct StartScreen: View {
 
 // MARK: - Status toast
 
-private struct StatusToast: View {
+struct StatusToast: View {
     let text: String
     var symbol = "checkmark.circle.fill"
 

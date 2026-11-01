@@ -6,7 +6,7 @@
 import SwiftUI
 
 struct SettingsSheet: View {
-    @ObservedObject var model: BrowserModel
+    @ObservedObject var manager: TabManager
     @ObservedObject private var extManager = ExtensionManager.shared
     @Environment(\.dismiss) private var dismiss
 
@@ -19,7 +19,7 @@ struct SettingsSheet: View {
                     }
                     Button {
                         extManager.reload()
-                        model.refreshExtensions()
+                        manager.refreshAllExtensions()
                     } label: {
                         Label("Rescan extensions folder", systemImage: "arrow.clockwise")
                     }
@@ -31,32 +31,32 @@ struct SettingsSheet: View {
 
                 Section {
                     Toggle(isOn: Binding(
-                        get: { model.isIncognito },
-                        set: { _ in model.toggleIncognito() }
+                        get: { manager.isIncognito },
+                        set: { _ in manager.toggleIncognito() }
                     )) {
                         Label("Incognito mode", systemImage: "eyeglasses")
-                            .foregroundStyle(model.isIncognito ? Theme.incognito : .primary)
+                            .foregroundStyle(manager.isIncognito ? Theme.incognito : .primary)
                     }
                 } header: {
                     Text("Privacy")
                 } footer: {
-                    Text("Incognito tints the interface and hides page content in the app switcher. Turning it on or off wipes the current session.")
+                    Text("Incognito tints the interface and hides page content in the app switcher. Turning it on or off wipes every tab and starts a fresh session.")
                 }
 
                 Section("This session") {
-                    LabeledRow("Trackers seen", "\(model.trackersSeen)")
-                    LabeledRow("Pages loaded", "\(model.pagesVisited)")
-                    LabeledRow("Erasures", "\(model.erasures)")
+                    TrackerCountRow(manager: manager)
+                    LabeledRow("Pages loaded", "\(manager.pagesVisited)")
+                    LabeledRow("Erasures", "\(manager.erasures)")
                     Button(role: .destructive) {
-                        model.erase()
+                        manager.erase()
                     } label: {
                         Label("Erase browsing data now", systemImage: "trash")
                     }
                 }
 
                 Section("About") {
-                    LabeledRow("Version", "1.0")
-                    Text("Focus Lite blocks known trackers with WebKit content rules, keeps the data store ephemeral, and runs Chrome-style extensions through a lightweight WebExtensions bridge.")
+                    LabeledRow("Version", "1.2")
+                    Text("Focus Lite blocks known trackers with WebKit content rules, keeps the data store ephemeral, browses in tabs with a dedicated iPad layout, and runs Chrome-style extensions through a lightweight WebExtensions bridge.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -85,7 +85,7 @@ struct SettingsSheet: View {
                     get: { extManager.isEnabled(ext.id) },
                     set: { enabled in
                         extManager.setEnabled(ext.id, enabled)
-                        model.refreshExtensions()
+                        manager.refreshAllExtensions()
                     }
                 ))
                 .labelsHidden()
@@ -97,6 +97,30 @@ struct SettingsSheet: View {
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+private struct TrackerCountRow: View {
+    @ObservedObject var manager: TabManager
+
+    var body: some View {
+        if let model = manager.activeTab?.model {
+            TrackerCount(model: model)
+        }
+    }
+}
+
+private struct TrackerCount: View {
+    @ObservedObject var model: BrowserModel
+
+    var body: some View {
+        HStack {
+            Text("Trackers seen")
+            Spacer()
+            Text("\(model.trackersSeen)")
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
     }
 }
 
