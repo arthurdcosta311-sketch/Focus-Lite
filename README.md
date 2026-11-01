@@ -7,6 +7,9 @@ lightweight engine that runs **Chrome-style extensions**.
 
 - **Private by default** — every session runs in an ephemeral data store. Nothing is
   saved between sessions, and the big erase button wipes everything on demand.
+- **Incognito mode** — a toggle (glasses button in the bar, or in Settings) that tints
+  the interface, shows an "Incognito" pill, hides page content in the app switcher, and
+  wipes the session whenever you turn it on or off.
 - **Tracker blocking** — a WebKit content rule list blocks requests to ~35 well-known
   advertising and analytics domains. The shield in the address bar shows how many
   tracking resources a page attempted to load.

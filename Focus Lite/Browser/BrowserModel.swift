@@ -19,12 +19,16 @@ final class BrowserModel: NSObject, ObservableObject {
     @Published var showErasedToast = false
     @Published var showSettings = false
     @Published var isStart = true
+    @Published var isIncognito = false
+    @Published var showIncognitoToast = false
+    @Published var incognitoToastText = ""
 
     let webView: WKWebView
 
     private let bridge = ExtensionBridge()
     private var backgroundWebView: WKWebView?
     private var cancellables: Set<AnyCancellable> = []
+    private var incognitoToastWorkItem: DispatchWorkItem?
 
     override init() {
         let configuration = WKWebViewConfiguration()
@@ -141,9 +145,37 @@ final class BrowserModel: NSObject, ObservableObject {
 
     /// Focus-style erase: wipe the session and everything the data store holds.
     func erase() {
+        wipeSession()
+        erasures += 1
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showErasedToast = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { [weak self] in
+            withAnimation(.easeOut(duration: 0.25)) { self?.showErasedToast = false }
+        }
+    }
+
+    // MARK: - Incognito mode
+
+    /// Toggles incognito mode. Either way the current session is wiped, so the
+    /// next pages load in a fresh ephemeral data store.
+    func toggleIncognito() {
+        isIncognito.toggle()
+        wipeSession()
+        incognitoToastText = isIncognito ? "Incognito on — nothing is saved" : "Incognito off"
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showIncognitoToast = true }
+        incognitoToastWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            withAnimation(.easeOut(duration: 0.25)) { self?.showIncognitoToast = false }
+        }
+        incognitoToastWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4, execute: work)
+    }
+
+    /// Stop browsing, drop everything the data store holds and return to the
+    /// start screen.
+    private func wipeSession() {
         webView.stopLoading()
         webView.load(URLRequest(url: URL(string: "about:blank")!))
-        WKWebsiteDataStore.default().removeData(
+        webView.configuration.websiteDataStore.removeData(
             ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
             modifiedSince: .distantPast,
             completionHandler: {}
@@ -154,11 +186,6 @@ final class BrowserModel: NSObject, ObservableObject {
         trackersSeen = 0
         progress = 0
         isLoading = false
-        erasures += 1
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showErasedToast = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) { [weak self] in
-            withAnimation(.easeOut(duration: 0.25)) { self?.showErasedToast = false }
-        }
     }
 
     // MARK: - Observation

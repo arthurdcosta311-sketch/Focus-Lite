@@ -29,6 +29,20 @@ struct SettingsSheet: View {
                     Text("Add your own: create a folder in Files → Focus Lite → Extensions containing a Chrome manifest.json (MV2 or MV3) with content scripts or a background script, then rescan. Toggles apply to the next page load.")
                 }
 
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { model.isIncognito },
+                        set: { _ in model.toggleIncognito() }
+                    )) {
+                        Label("Incognito mode", systemImage: "eyeglasses")
+                            .foregroundStyle(model.isIncognito ? Theme.incognito : .primary)
+                    }
+                } header: {
+                    Text("Privacy")
+                } footer: {
+                    Text("Incognito tints the interface and hides page content in the app switcher. Turning it on or off wipes the current session.")
+                }
+
                 Section("This session") {
                     LabeledRow("Trackers seen", "\(model.trackersSeen)")
                     LabeledRow("Pages loaded", "\(model.pagesVisited)")

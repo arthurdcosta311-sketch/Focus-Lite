@@ -9,16 +9,20 @@ import WebKit
 enum Theme {
     static let accent = Color(red: 1.0, green: 0.545, blue: 0.235)
     static let deepIndigo = Color(red: 0.09, green: 0.09, blue: 0.24)
+    static let incognito = Color(red: 0.66, green: 0.5, blue: 0.95)
+    static let incognitoDeep = Color(red: 0.04, green: 0.02, blue: 0.10)
 }
 
 struct BrowserView: View {
     @StateObject private var model = BrowserModel()
+    @Environment(\.scenePhase) private var scenePhase
     @FocusState private var addressFocused: Bool
     @State private var showTrackerTip = false
 
     var body: some View {
         ZStack {
-            Theme.deepIndigo.ignoresSafeArea()
+            (model.isIncognito ? Theme.incognitoDeep : Theme.deepIndigo)
+                .ignoresSafeArea()
 
             if model.isStart {
                 StartScreen(model: model)
@@ -33,6 +37,9 @@ struct BrowserView: View {
                 progressBar
                     .padding(.horizontal, 16)
                     .padding(.top, 2)
+                if model.isIncognito {
+                    incognitoPill
+                }
                 Spacer()
                 if showTrackerTip {
                     trackerTip
@@ -41,14 +48,25 @@ struct BrowserView: View {
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
                 if model.showErasedToast {
-                    EraseToast()
+                    StatusToast(text: "Browsing data erased")
+                        .padding(.bottom, 8)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                if model.showIncognitoToast {
+                    StatusToast(text: model.incognitoToastText, symbol: "eyeglasses")
                         .padding(.bottom, 8)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 bottomBar
             }
+
+            if model.isIncognito && scenePhase != .active {
+                IncognitoPrivacyScreen()
+                    .transition(.opacity)
+            }
         }
         .animation(.easeInOut(duration: 0.25), value: model.isStart)
+        .animation(.easeInOut(duration: 0.25), value: model.isIncognito)
         .sheet(isPresented: $model.showSettings) {
             SettingsSheet(model: model)
         }
@@ -84,8 +102,28 @@ struct BrowserView: View {
             .onTapGesture { withAnimation { showTrackerTip = false } }
     }
 
+    private var incognitoPill: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "eyeglasses")
+            Text("Incognito")
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(Theme.incognito)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Theme.incognito.opacity(0.15), in: Capsule())
+    }
+
     private var bottomBar: some View {
         HStack(spacing: 10) {
+            Button {
+                withAnimation { model.toggleIncognito() }
+            } label: {
+                Image(systemName: "eyeglasses")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(model.isIncognito ? Theme.incognito : Color.white)
+            }
+
             if !model.isStart {
                 Button(action: model.goBack) {
                     Image(systemName: "chevron.left")
@@ -250,18 +288,40 @@ private struct StartScreen: View {
     }
 }
 
-// MARK: - Erase toast
+// MARK: - Status toast
 
-private struct EraseToast: View {
+private struct StatusToast: View {
+    let text: String
+    var symbol = "checkmark.circle.fill"
+
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-            Text("Browsing data erased")
+            Image(systemName: symbol)
+            Text(text)
                 .font(.subheadline.weight(.medium))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.regularMaterial, in: Capsule())
         .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+    }
+}
+
+// MARK: - Incognito privacy screen
+
+/// Covers all content while the app is in the app switcher or backgrounded in
+/// incognito mode, so page content never shows in task switcher snapshots.
+private struct IncognitoPrivacyScreen: View {
+    var body: some View {
+        ZStack {
+            Theme.incognitoDeep.ignoresSafeArea()
+            VStack(spacing: 10) {
+                Image(systemName: "eyeglasses")
+                    .font(.system(size: 40, weight: .bold))
+                Text("Incognito")
+                    .font(.headline)
+            }
+            .foregroundStyle(Theme.incognito)
+        }
     }
 }
