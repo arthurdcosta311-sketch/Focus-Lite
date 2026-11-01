@@ -2,7 +2,7 @@ name: Build IPA
 
 on:
   push:
-    branches: [main]
+    branches: [main, preview]
   workflow_dispatch:
 
 permissions:
@@ -40,7 +40,7 @@ jobs:
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FocusLite-ipa
+          name: FocusLite-ipa${{ steps.channel.outputs.suffix }}
           path: FocusLite.ipa
           if-no-files-found: error
 
@@ -52,13 +52,25 @@ jobs:
             "build/FocusLite.xcarchive/Products/Applications/Focus Lite.app/Info.plist")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Determine release channel
+        id: channel
+        run: |
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            echo "suffix=" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "body=Unsigned Release IPA built from main. Re-sign it with your own certificate to install on a device." >> "$GITHUB_OUTPUT"
+          else
+            echo "suffix=-preview" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "body=Unsigned Release IPA built from the preview branch. Re-sign it with your own certificate to install on a device." >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Attach IPA to GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.version.outputs.version }}
-          name: Focus Lite v${{ steps.version.outputs.version }}
-          body: >
-            Unsigned Release IPA built from main. Re-sign it with your own
-            certificate to install on a device.
+          tag_name: v${{ steps.version.outputs.version }}${{ steps.channel.outputs.suffix }}
+          name: Focus Lite v${{ steps.version.outputs.version }}${{ steps.channel.outputs.suffix }}
+          body: ${{ steps.channel.outputs.body }}
+          prerelease: ${{ steps.channel.outputs.prerelease }}
           files: FocusLite.ipa
           fail_on_unmatched_files: true
