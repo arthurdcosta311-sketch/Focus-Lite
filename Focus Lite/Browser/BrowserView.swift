@@ -56,7 +56,9 @@ struct TabContentView: View {
         ZStack {
             ForEach(manager.tabs) { tab in
                 WebViewContainer(webView: tab.model.webView)
-                    .ignoresSafeArea(edges: [.top, .bottom])
+                    // Bottom edge runs under the home indicator, but the top
+                    // stays below the status bar / Dynamic Island.
+                    .ignoresSafeArea(edges: [.bottom])
                     .opacity(tab.id == manager.activeTabID ? 1 : 0)
                     .allowsHitTesting(tab.id == manager.activeTabID)
             }
