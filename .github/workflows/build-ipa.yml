@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -40,3 +43,22 @@ jobs:
           name: FocusLite-ipa
           path: FocusLite.ipa
           if-no-files-found: error
+
+      - name: Read app version
+        id: version
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c \
+            "Print :CFBundleShortVersionString" \
+            "build/FocusLite.xcarchive/Products/Applications/Focus Lite.app/Info.plist")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Attach IPA to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Focus Lite v${{ steps.version.outputs.version }}
+          body: >
+            Unsigned Release IPA built from main. Re-sign it with your own
+            certificate to install on a device.
+          files: FocusLite.ipa
+          fail_on_unmatched_files: true
