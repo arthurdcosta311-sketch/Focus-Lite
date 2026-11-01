@@ -9,6 +9,7 @@ struct BrowserExtension: Identifiable {
     struct ContentScriptSpec {
         let matches: [String]
         let scripts: [String]
+        let cssSources: [String]
         let runAtDocumentStart: Bool
     }
 
@@ -39,6 +40,17 @@ final class ExtensionManager: ObservableObject {
         var ids = enabledIDs
         if enabled { ids.insert(id) } else { ids.remove(id) }
         enabledIDs = ids
+    }
+
+    /// True when any enabled extension ships a Lua script, so the hosts know
+    /// to preload the Lua runtime before the extension scripts.
+    var usesLua: Bool {
+        let marker = LuaBridge.luaBootstrapMarker
+        return extensions.contains { ext in
+            guard isEnabled(ext.id) else { return false }
+            if ext.backgroundScripts.contains(where: { $0.hasPrefix(marker) }) { return true }
+            return ext.contentScripts.contains { $0.scripts.contains { $0.hasPrefix(marker) } }
+        }
     }
 
     init() {
@@ -83,12 +95,17 @@ final class ExtensionManager: ObservableObject {
             for entry in entries {
                 let matches = entry["matches"] as? [String] ?? ["<all_urls>"]
                 let files = entry["js"] as? [String] ?? []
-                let sources = files.compactMap { Self.fileContents($0, in: folder) }
-                guard !sources.isEmpty else { continue }
+                let sources = files.compactMap { Self.scriptSource($0, in: folder, extId: folder.lastPathComponent) }
+                // Firefox-style CSS content scripts are welcome too; they are
+                // injected as style elements behind the same match guard.
+                let cssFiles = entry["css"] as? [String] ?? []
+                let css = cssFiles.compactMap { Self.fileContents($0, in: folder) }
+                guard !sources.isEmpty || !css.isEmpty else { continue }
                 let runAt = entry["run_at"] as? String
                 contentScripts.append(BrowserExtension.ContentScriptSpec(
                     matches: matches,
                     scripts: sources,
+                    cssSources: css,
                     runAtDocumentStart: runAt == "document_start"
                 ))
             }
@@ -104,7 +121,7 @@ final class ExtensionManager: ObservableObject {
             } else if let page = background["page"] as? String {
                 files = [page]
             }
-            backgroundScripts = files.compactMap { Self.fileContents($0, in: folder) }
+            backgroundScripts = files.compactMap { Self.scriptSource($0, in: folder, extId: folder.lastPathComponent) }
         } else if let single = manifest["background"] as? String {
             backgroundScripts = [single].compactMap { Self.fileContents($0, in: folder) }
         }
@@ -122,6 +139,15 @@ final class ExtensionManager: ObservableObject {
     private static func fileContents(_ name: String, in folder: URL) -> String? {
         guard let data = try? Data(contentsOf: folder.appendingPathComponent(name)) else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    /// Returns a script's source, wrapping `.lua` files in the JavaScript
+    /// bootstrap that runs them on the embedded Lua VM. JavaScript files pass
+    /// through untouched.
+    private static func scriptSource(_ name: String, in folder: URL, extId: String) -> String? {
+        guard let contents = fileContents(name, in: folder) else { return nil }
+        guard name.hasSuffix(".lua") else { return contents }
+        return LuaBridge.luaBootstrap(source: contents, name: name, extId: extId)
     }
 
     // MARK: - Match patterns (host/path glob subset of Chrome match patterns)
@@ -168,10 +194,14 @@ final class ExtensionManager: ObservableObject {
         let fileManager = FileManager.default
         try? fileManager.createDirectory(at: extensionsDirectory, withIntermediateDirectories: true)
         let existing = (try? fileManager.contentsOfDirectory(atPath: extensionsDirectory.path)) ?? []
-        guard existing.isEmpty else { return }
+        let isFirstLaunch = existing.isEmpty
 
+        // Materialize per folder, so samples added in later versions reach
+        // installs that already have the older ones.
+        var newlyAdded: [String] = []
         for sample in BundledSamples.all {
             let folder = extensionsDirectory.appendingPathComponent(sample.folder, isDirectory: true)
+            guard !fileManager.fileExists(atPath: folder.path) else { continue }
             try? fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
             try? sample.manifest.write(
                 to: folder.appendingPathComponent("manifest.json"),
@@ -183,8 +213,16 @@ final class ExtensionManager: ObservableObject {
                     atomically: true, encoding: .utf8
                 )
             }
+            newlyAdded.append(sample.folder)
         }
-        enabledIDs = Set(BundledSamples.all.map { $0.folder })
+        guard !newlyAdded.isEmpty else { return }
+        if isFirstLaunch {
+            enabledIDs = Set(BundledSamples.all.map { $0.folder })
+        } else {
+            // Only newly added samples turn on, so toggles users flipped
+            // keep their state.
+            enabledIDs = enabledIDs.union(newlyAdded)
+        }
     }
 }
 
@@ -195,7 +233,7 @@ private enum BundledSamples {
         let files: [(name: String, source: String)]
     }
 
-    static var all: [Sample] { [pageCleaner, helloResponder] }
+    static var all: [Sample] { [pageCleaner, helloResponder, readingTime, luaGreeter] }
 
     static let pageCleaner = Sample(
         folder: "focus-page-cleaner",
@@ -260,6 +298,84 @@ chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
     sendResponse({ summary: "Heard " + message.url + " — the extension bridge works." });
   }
 });
+"""#)
+        ]
+    )
+
+    /// Lightweight by design: one content script, no permissions, no
+    /// background page, no storage. The same manifest and script load
+    /// unchanged in Chrome and Firefox.
+    static let readingTime = Sample(
+        folder: "focus-reading-time",
+        manifest: #"""
+{
+  "manifest_version": 3,
+  "name": "Reading Time",
+  "version": "1.0.0",
+  "description": "Adds an estimated reading time above articles. Cross-browser by design: one tiny content script, no permissions, no background page.",
+  "content_scripts": [
+    { "matches": ["https://*/*", "http://*/*"], "js": ["content.js"], "run_at": "document_idle" }
+  ]
+}
+"""#,
+        files: [
+            ("content.js", #"""
+(function () {
+  var article = document.querySelector("article, main, [role='main']");
+  if (!article) return;
+  var words = (article.innerText || "").trim().split(/\s+/).filter(String).length;
+  if (words < 120) return;
+  var minutes = Math.max(1, Math.round(words / 220));
+  var badge = document.createElement("div");
+  badge.setAttribute("data-focus-ext", "focus-reading-time");
+  badge.textContent = minutes + " min read";
+  badge.style.cssText = "margin:0 0 12px;font:600 13px -apple-system,sans-serif;color:#6b7280;";
+  if (article.firstElementChild) {
+    article.insertBefore(badge, article.firstElementChild);
+  } else {
+    article.appendChild(badge);
+  }
+})();
+"""#)
+        ]
+    )
+
+    /// Demonstrates the Lua scripting language: a background script and a
+    /// content script, both written in `.lua`, running on the embedded Lua VM
+    /// and talking over the same runtime bridge the JS samples use.
+    static let luaGreeter = Sample(
+        folder: "focus-lua-greeter",
+        manifest: #"""
+{
+  "manifest_version": 3,
+  "name": "Lua Greeter",
+  "version": "1.0.0",
+  "description": "Background and content scripts written in Lua: they run on the embedded Lua VM and greet over the runtime bridge.",
+  "content_scripts": [
+    { "matches": ["<all_urls>"], "js": ["content.lua"], "run_at": "document_idle" }
+  ],
+  "background": { "scripts": ["background.lua"] }
+}
+"""#,
+        files: [
+            ("background.lua", #"""
+-- A background script written in Lua.
+-- The global `focus` table is Focus Lite's Lua API.
+
+focus.onMessage(function (message, sendResponse)
+  if message and message.type == "focus:hello" then
+    sendResponse({ summary = "Hello from Lua! Page said: " .. tostring(message.url) })
+  end
+end)
+
+focus.log("Lua Greeter background script loaded")
+"""#),
+            ("content.lua", #"""
+-- A Lua content script: greets the Lua background script.
+
+focus.sendMessage({ type = "focus:hello", url = "a Lua content script" }, function (reply)
+  focus.log(reply and reply.summary or "no reply from the Lua background")
+end)
 """#)
         ]
     )

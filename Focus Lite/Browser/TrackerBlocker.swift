@@ -16,6 +16,11 @@ enum TrackerBlocker {
         "chartboost.com", "inmobi.com", "mopub.com", "moatads.com", "yieldmo.com"
     ]
 
+    private static let ruleListIdentifier = "focus.blockers.v1"
+    private static var cachedRuleList: WKContentRuleList?
+    private static var pendingControllers: [WKUserContentController] = []
+    private static var isPreparingRuleList = false
+
     /// WebKit content-rule JSON that blocks every known tracker domain.
     static var rulesJSON: String {
         let rules = blockedTrackers.map { domain in
@@ -25,27 +30,54 @@ enum TrackerBlocker {
     }
 
     static func install(into controller: WKUserContentController) {
-        WKContentRuleListStore.default().compileContentRuleList(
-            forIdentifier: "focus.blockers.v1",
-            encodedContentRuleList: rulesJSON
-        ) { ruleList, error in
-            guard let ruleList else {
+        if let cachedRuleList {
+            controller.add(cachedRuleList)
+            return
+        }
+
+        pendingControllers.append(controller)
+        guard !isPreparingRuleList else { return }
+        isPreparingRuleList = true
+
+        guard let store = WKContentRuleListStore.default() else {
+            finishPreparing(nil)
+            return
+        }
+        store.lookUpContentRuleList(forIdentifier: ruleListIdentifier) { ruleList, _ in
+            if let ruleList {
+                finishPreparing(ruleList)
+                return
+            }
+            store.compileContentRuleList(
+                forIdentifier: ruleListIdentifier,
+                encodedContentRuleList: rulesJSON
+            ) { compiledList, error in
                 if let error {
                     print("[Focus Lite] rule list compile failed: \(error.localizedDescription)")
                 }
-                return
+                finishPreparing(compiledList)
             }
-            DispatchQueue.main.async {
-                controller.add(ruleList)
+        }
+    }
+
+    private static func finishPreparing(_ ruleList: WKContentRuleList?) {
+        DispatchQueue.main.async {
+            if let ruleList {
+                cachedRuleList = ruleList
+                pendingControllers.forEach { $0.add(ruleList) }
             }
+            pendingControllers.removeAll()
+            isPreparingRuleList = false
         }
     }
 
     /// Counts tracking resources seen on the current page (the engine blocks
     /// the request itself; this audit reports what the page attempted).
-    static let auditScript = #"""
+    static var auditScript: String {
+        let serializedTrackers = blockedTrackers.map { "\"\($0)\"" }.joined(separator: ",")
+        return #"""
 (function () {
-  var trackers = ["doubleclick.net","googlesyndication.com","google-analytics.com","googletagmanager.com","adservice.google.com","connect.facebook.net","facebook.net","scorecardresearch.com","quantserve.com","hotjar.com","mixpanel.com","segment.io","segment.com","amplitude.com","criteo.com","taboola.com","outbrain.com","adnxs.com","adsrvr.org","pubmatic.com","rubiconproject.com","casalemedia.com","openx.net","bidswitch.net","smartadserver.com","amazon-adsystem.com","appsflyer.com","branch.io","kochava.com","chartboost.com","inmobi.com","mopub.com","moatads.com","yieldmo.com"];
+  var trackers = [\#(serializedTrackers)];
   var seen = {};
   function check(url) {
     if (!url) return;
@@ -59,4 +91,5 @@ enum TrackerBlocker {
   return Object.keys(seen).length;
 })()
 """#
+    }
 }

@@ -2,3 +2,7 @@
 xcuserdata/
 build/
 DerivedData/
+
+# Agent work log — must never reach GitHub
+agent_chat*.md*
+agent_chat.md

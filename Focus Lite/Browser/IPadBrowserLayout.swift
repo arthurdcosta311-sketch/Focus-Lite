@@ -41,13 +41,19 @@ struct IPadBrowserLayout: View {
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
                 if let toastText = manager.toastText {
-                    StatusToast(text: toastText, symbol: manager.toastSymbol)
+                    StatusToast(text: toastText, symbol: manager.toastSymbol,
+                                actionTitle: manager.toastActionTitle) {
+                        manager.allowPopupsForLastBlockedSite()
+                    }
                         .padding(.bottom, 10)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
         }
         .animation(.easeInOut(duration: 0.25), value: manager.isIncognito)
+        .onAppear { manager.captureTabPreviews() }
+        .onDisappear { manager.clearTabPreviews() }
+        .onChange(of: manager.pagesVisited) { _, _ in manager.captureActiveTabPreview() }
     }
 
     // MARK: Sidebar
@@ -163,9 +169,17 @@ private struct TabRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: model.isStart ? "shield.lefthalf.filled" : "globe")
-                .font(.system(size: 13))
-                .foregroundStyle(isActive ? Theme.accent : Color.secondary)
+            if let image = model.previewImage, !model.isStart {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 44, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+            } else {
+                Image(systemName: model.isStart ? "shield.lefthalf.filled" : "globe")
+                    .font(.system(size: 13))
+                    .foregroundStyle(isActive ? Theme.accent : Color.secondary)
+            }
             Text(model.displayedURL?.host ?? "Start Page")
                 .font(.subheadline)
                 .lineLimit(1)

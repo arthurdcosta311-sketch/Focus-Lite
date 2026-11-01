@@ -41,6 +41,15 @@ struct BrowserView: View {
         .sheet(isPresented: $manager.showSettings) {
             SettingsSheet(manager: manager)
         }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                if UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular {
+                    manager.captureTabPreviews()
+                }
+            } else {
+                manager.clearTabPreviews()
+            }
+        }
         .preferredColorScheme(.dark)
     }
 }
@@ -218,7 +227,10 @@ struct PhoneBrowserLayout: View {
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
                 if let toastText = manager.toastText {
-                    StatusToast(text: toastText, symbol: manager.toastSymbol)
+                    StatusToast(text: toastText, symbol: manager.toastSymbol,
+                                actionTitle: manager.toastActionTitle) {
+                        manager.allowPopupsForLastBlockedSite()
+                    }
                         .padding(.bottom, 8)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -237,6 +249,9 @@ struct PhoneBrowserLayout: View {
             }
         }
         .animation(.easeInOut(duration: 0.25), value: manager.showTabSwitcher)
+        .onChange(of: manager.showTabSwitcher) { _, isShowing in
+            if !isShowing { manager.clearTabPreviews() }
+        }
         .background(
             GeometryReader { geo in
                 Color.clear
@@ -327,7 +342,7 @@ private struct PhoneBottomBar: View {
 
     private var tabsButton: some View {
         Button {
-            withAnimation { manager.showTabSwitcher = true }
+            withAnimation { manager.openTabSwitcher() }
         } label: {
             Image(systemName: "square.on.square")
                 .font(.system(size: 15, weight: .semibold))
@@ -444,15 +459,26 @@ private struct TabCard: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: 8) {
-                Image(systemName: model.isStart ? "shield.lefthalf.filled" : "globe")
-                    .font(.system(size: 18))
-                    .foregroundStyle(isActive ? Theme.accent : Color.secondary)
+                if let image = model.previewImage, !model.isStart {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 88)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(.white.opacity(0.10))
+                        )
+                } else {
+                    Image(systemName: model.isStart ? "shield.lefthalf.filled" : "globe")
+                        .font(.system(size: 22))
+                        .foregroundStyle(isActive ? Theme.accent : Color.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 88)
+                }
                 Text(model.displayedURL?.host ?? "Start Page")
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                Text(model.displayedURL?.absoluteString ?? "Nothing loaded yet")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -485,7 +511,7 @@ private struct TabCard: View {
             }
             .offset(x: 6, y: -6)
         }
-        .frame(height: 108)
+        .frame(height: 150)
     }
 }
 
@@ -568,12 +594,21 @@ private struct StartScreen: View {
 struct StatusToast: View {
     let text: String
     var symbol = "checkmark.circle.fill"
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
             Text(text)
                 .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Theme.accent)
+                    .buttonStyle(.plain)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

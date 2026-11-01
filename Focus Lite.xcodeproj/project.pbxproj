@@ -27,10 +27,11 @@
 		0A0000000000000000000003 /* Focus Lite.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Focus Lite.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A0000000000000000000023 /* Focus LiteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Focus LiteTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A0000000000000000000033 /* Focus LiteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Focus LiteUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C7C145D31D030C32BA3FC2CA /* Focus Lite.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "Focus Lite.entitlements"; path = "Focus Lite/Focus Lite.entitlements"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		0A0000000000000000000011 /* Exceptions for "Focus Lite" folder in "Focus Lite" target */ = {
+		0A0000000000000000000011 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -43,7 +44,7 @@
 		0A0000000000000000000005 /* Focus Lite */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				0A0000000000000000000011 /* Exceptions for "Focus Lite" folder in "Focus Lite" target */,
+				0A0000000000000000000011 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
 			);
 			path = "Focus Lite";
 			sourceTree = "<group>";
@@ -92,6 +93,7 @@
 				0A0000000000000000000025 /* Focus LiteTests */,
 				0A0000000000000000000035 /* Focus LiteUITests */,
 				0A0000000000000000000004 /* Products */,
+				C7C145D31D030C32BA3FC2CA /* Focus Lite.entitlements */,
 			);
 			sourceTree = "<group>";
 		};
@@ -406,6 +408,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Focus Lite/Focus Lite.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
@@ -439,6 +442,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Focus Lite/Focus Lite.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;

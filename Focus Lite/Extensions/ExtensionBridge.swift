@@ -82,6 +82,9 @@ final class ExtensionBridge: NSObject, WKScriptMessageHandler {
         }
       }
     };
+    // Lightweight extensions commonly call storage.sync; Focus Lite keeps
+    // everything on device, so sync aliases the same namespaced store.
+    api.storage.sync = api.storage.local;
     inst = { api: api, pending: pending, listeners: listeners };
     store.instances[extId] = inst;
     return api;
@@ -127,6 +130,27 @@ final class ExtensionBridge: NSObject, WKScriptMessageHandler {
             + guardCode
             + source
             + "\n})();"
+    }
+
+    /// Wraps a Firefox-style CSS content script as JS that injects a style
+    /// element, behind the same match-pattern guard as JS content scripts.
+    static func wrappedCSS(source: String, extId: String, patterns: [String]) -> String {
+        let safeId = extId
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        let regexes = ExtensionManager.matchRegexes(for: patterns)
+        let patternsJSON = (try? String(data: JSONSerialization.data(withJSONObject: regexes), encoding: .utf8)) ?? "[]"
+        let guardCode = regexes.isEmpty ? "" :
+            "var __ok = __patterns.some(function (r) { try { return new RegExp(r).test(location.href); } catch (e) { return false; } });\nif (!__ok) return;\n"
+        let cssJSON = (try? String(data: JSONSerialization.data(withJSONObject: source), encoding: .utf8)) ?? "\"\""
+        return "(function(){\n"
+            + "var __patterns = \(patternsJSON);\n"
+            + guardCode
+            + "var style = document.createElement('style');\n"
+            + "style.setAttribute('data-focus-ext', \"\(safeId)\");\n"
+            + "style.textContent = \(cssJSON);\n"
+            + "(document.head || document.documentElement).appendChild(style);\n"
+            + "})();"
     }
 
     // MARK: - WKScriptMessageHandler
