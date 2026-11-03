@@ -43,6 +43,7 @@ final class BrowserModel: NSObject, ObservableObject {
         configuration.userContentController = controller
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
+        webView.pageZoom = CGFloat(CustomizationStore.shared.pageZoom)
 
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -182,9 +183,7 @@ final class BrowserModel: NSObject, ObservableObject {
         } else if !trimmed.contains(" "), let candidate = URL(string: "https://" + trimmed), candidate.host != nil {
             url = candidate
         } else {
-            var components = URLComponents(string: "https://duckduckgo.com/")
-            components?.queryItems = [URLQueryItem(name: "q", value: trimmed)]
-            url = components?.url
+            url = CustomizationStore.shared.searchURL(for: trimmed)
         }
         guard let url else { return }
         addressText = url.host ?? trimmed

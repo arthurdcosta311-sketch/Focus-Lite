@@ -3,6 +3,7 @@
 //  Focus Lite
 //
 
+import Combine
 import SwiftUI
 import WebKit
 
@@ -40,6 +41,7 @@ final class TabManager: ObservableObject {
     /// private window. Switching modes swaps in a fresh store so nothing
     /// carries over.
     private var dataStore: WKWebsiteDataStore = .nonPersistent()
+    private var cancellables: Set<AnyCancellable> = []
     private var toastWorkItem: DispatchWorkItem?
     private var toastActionHost: String?
     private var previewCaptureGeneration = 0
@@ -51,7 +53,23 @@ final class TabManager: ObservableObject {
 
     init() {
         popupBlockerEnabled = PopupBlocker.isEnabled()
+        observeCustomization()
         addTab()
+    }
+
+    /// Keeps every view that reads Theme.accent in step with customization
+    /// changes and applies the zoom setting to all open tabs live.
+    private func observeCustomization() {
+        CustomizationStore.shared.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        CustomizationStore.shared.$pageZoom
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] zoom in
+                self?.tabs.forEach { $0.model.webView.pageZoom = CGFloat(zoom) }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Tabs
@@ -73,6 +91,9 @@ final class TabManager: ObservableObject {
         }
         tabs.append(tab)
         activeTabID = tab.id
+        if let homepage = CustomizationStore.shared.homepageURL() {
+            tab.model.load(homepage.absoluteString)
+        }
         BrowserLogStore.shared.record("New tab opened")
         return tab
     }

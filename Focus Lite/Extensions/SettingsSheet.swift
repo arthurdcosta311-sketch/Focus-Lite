@@ -11,6 +11,7 @@ struct SettingsSheet: View {
     @ObservedObject private var extManager = ExtensionManager.shared
     @ObservedObject private var dnsManager = EncryptedDNSManager.shared
     @ObservedObject private var vpnManager = PersonalVPNManager.shared
+    @ObservedObject private var customization = CustomizationStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var vpnPassword = ""
 
@@ -47,6 +48,67 @@ struct SettingsSheet: View {
                     Text("Chrome-style extensions")
                 } footer: {
                     Text("Add your own: create a folder in Files → Focus Lite → Extensions containing a Chrome manifest.json (MV2 or MV3) with content scripts or a background script written in JavaScript or Lua (.lua files run on an embedded Lua VM and use the global focus table), then rescan. Toggles apply to the next page load.")
+                }
+
+                Section {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Accent color")
+                        HStack(spacing: 12) {
+                            ForEach(Accent.allCases) { choice in
+                                Button {
+                                    withAnimation { customization.accent = choice }
+                                } label: {
+                                    ZStack {
+                                        Circle()
+                                            .fill(choice.color)
+                                            .frame(width: 34, height: 34)
+                                        if customization.accent == choice {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(.black.opacity(0.65))
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+
+                    Picker("Search engine", selection: $customization.searchEngine) {
+                        ForEach(SearchEngine.allCases) { engine in
+                            Text(engine.displayName).tag(engine)
+                        }
+                    }
+                    if customization.searchEngine == .custom {
+                        TextField("Search URL template with %s", text: $customization.customSearchTemplate)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                    }
+
+                    Toggle("Open homepage in new tabs", isOn: $customization.homepageEnabled)
+                    if customization.homepageEnabled {
+                        TextField("Homepage address", text: $customization.homepageText)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("Page zoom")
+                            Spacer()
+                            Text("\(Int((customization.pageZoom * 100).rounded()))%")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Slider(value: $customization.pageZoom, in: 0.5...2.0, step: 0.05)
+                    }
+                } header: {
+                    Text("Customize")
+                } footer: {
+                    Text("The accent colors the interface, the engine the address bar sends searches to, and the zoom of every page. The homepage opens in tabs created afterwards. A custom search template is an http(s) URL containing %s where the search term goes. These choices are saved on this device.")
                 }
 
                 Section {

@@ -92,4 +92,56 @@ struct Focus_LiteTests {
         #expect(store.entries.isEmpty)
     }
 
+    private func makeTestDefaults() -> (UserDefaults, String) {
+        let suiteName = "FocusLiteTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        return (defaults, suiteName)
+    }
+
+    @Test func searchEngineChoicesPersistAndBuildQueryURLs() {
+        let (defaults, suiteName) = makeTestDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = CustomizationStore(defaults: defaults)
+        #expect(store.searchURL(for: "privacy browser")?.host == "duckduckgo.com")
+        #expect(store.searchURL(for: "privacy browser")?.query == "q=privacy%20browser")
+
+        store.searchEngine = .custom
+        store.customSearchTemplate = "https://search.example.com/find?term=%s"
+        let url = store.searchURL(for: "cute cats & dogs")
+        #expect(url?.host == "search.example.com")
+        #expect(url?.query == "term=cute%20cats%20%26%20dogs")
+
+        // A template without %s or an http(s) scheme is refused.
+        store.customSearchTemplate = "search.example.com/%s"
+        #expect(store.searchURL(for: "x") == nil)
+    }
+
+    @Test func homepageAcceptsSchemelessAddressesAndCanBeDisabled() {
+        let (defaults, suiteName) = makeTestDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = CustomizationStore(defaults: defaults)
+        #expect(store.homepageURL() == nil)
+
+        store.homepageEnabled = true
+        store.homepageText = "example.com/news"
+        #expect(store.homepageURL()?.host == "example.com")
+
+        store.homepageEnabled = false
+        #expect(store.homepageURL() == nil)
+    }
+
+    @Test func customizationChoicesPersistAcrossInstances() {
+        let (defaults, suiteName) = makeTestDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = CustomizationStore(defaults: defaults)
+        store.accent = .mint
+        store.pageZoom = 1.5
+
+        #expect(CustomizationStore(defaults: defaults).accent == .mint)
+        #expect(CustomizationStore(defaults: defaults).pageZoom == 1.5)
+    }
+
 }

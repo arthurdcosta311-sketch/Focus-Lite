@@ -8,7 +8,9 @@ import WebKit
 import UIKit
 
 enum Theme {
-    static let accent = Color(red: 1.0, green: 0.545, blue: 0.235)
+    /// The accent follows the user's choice in Settings; views re-render
+    /// because TabManager forwards the customization store's changes.
+    static var accent: Color { CustomizationStore.shared.accentColor }
     static let deepIndigo = Color(red: 0.09, green: 0.09, blue: 0.24)
     static let incognito = Color(red: 0.66, green: 0.5, blue: 0.95)
     static let incognitoDeep = Color(red: 0.04, green: 0.02, blue: 0.10)

@@ -21,6 +21,9 @@ lightweight engine that runs **Chrome-style extensions**.
   tracking resources a page attempted to load.
 - **Browser logs** — Settings shows the latest 100 navigation and session events in
   memory only, without URL paths, search terms, or page content.
+- **Customizable** — pick the accent color, choose which engine the address bar
+  sends searches to (or supply a custom search URL template), open an optional
+  homepage in new tabs, and set the page zoom; all saved on device in Settings.
 - **Runs Chrome-style extensions** — drop any folder with a Chrome `manifest.json`
   into the app's `Extensions` folder and it loads. Two sample extensions are bundled
   and enabled on first launch.
