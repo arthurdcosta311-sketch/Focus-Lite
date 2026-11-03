@@ -34,8 +34,9 @@ lightweight engine that runs **Chrome-style extensions**.
 - **Own search engine** — "Focus Search" is the default engine: searching
   loads a classic search-engine results page right in the tab — white page,
   colored wordmark, search box, Web and Images tabs, green breadcrumbs,
-  link-blue titles, snippets, instant answers, and "Search for more" loading
-  10 more results at a time — built from web results parsed out of DuckDuckGo's
+  link-blue titles, snippets, instant answers, and a "Search for more" link
+  that loads 10 more and re-renders the page with every result loaded so far
+  — built from web results parsed out of DuckDuckGo's
   lightweight HTML endpoints, with the Images tab trying Google's servers
   first, then Bing and DuckDuckGo as fallbacks (each attempt logged, and
   SafeSearch off on all of them so image results are not pre-filtered). Domain

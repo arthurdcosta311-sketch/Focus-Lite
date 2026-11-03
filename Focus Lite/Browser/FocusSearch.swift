@@ -52,6 +52,9 @@ final class FocusSearchService {
     static let shared = FocusSearchService()
     /// Results shown per page: "Search for more" loads 10 more each tap.
     static let pageSize = 10
+    /// Upper bound on source pages fetched while accumulating results for a
+    /// single "Search for more" render, so a broken pager can never spin.
+    private static let maxAccumulatedBatches = 10
 
     private let session: URLSession
 
@@ -93,6 +96,39 @@ final class FocusSearchService {
     /// The results page's "More results" link navigates here.
     func webResults(for query: String, offset: Int) async -> [FocusSearchResult] {
         await fetchWebResults(query, offset: offset)
+    }
+
+    /// Web results accumulated from the top of the list through `targetCount`
+    /// items, paged through the endpoint offset by offset and de-duplicated.
+    /// A "Search for more" render shows every result loaded so far at once,
+    /// instead of replacing the previous page with just the latest batch.
+    func accumulatedWebResults(for query: String, upTo targetCount: Int) async -> [FocusSearchResult] {
+        var all: [FocusSearchResult] = []
+        var seen = Set<String>()
+        var batchOffset = 0
+        while all.count < targetCount, batchOffset < Self.maxAccumulatedBatches * Self.pageSize {
+            let batch = await webResults(for: query, offset: batchOffset)
+            let fresh = batch.filter { seen.insert($0.url.absoluteString).inserted }
+            all += fresh
+            if batch.count < Self.pageSize || fresh.isEmpty { break }
+            batchOffset += Self.pageSize
+        }
+        return all
+    }
+
+    /// Image results accumulated the same way for the Images grid.
+    func accumulatedImageResults(for query: String, upTo targetCount: Int) async -> [FocusSearchImage] {
+        var all: [FocusSearchImage] = []
+        var seen = Set<String>()
+        var batchOffset = 0
+        while all.count < targetCount, batchOffset < Self.maxAccumulatedBatches * Self.pageSize {
+            let batch = await imageResults(for: query, offset: batchOffset)
+            let fresh = batch.filter { seen.insert($0.imageURL.absoluteString).inserted }
+            all += fresh
+            if batch.count < Self.pageSize || fresh.isEmpty { break }
+            batchOffset += Self.pageSize
+        }
+        return all
     }
 
     /// Image results for the Images tab. Sources are tried in order until
@@ -656,7 +692,9 @@ enum FocusSearchPage {
         }
 
         if hasMore {
-            let nextOffset = offset + max(response.results.count, 1)
+            // The page lists every result loaded so far, so the next source
+            // batch starts right after the last one shown.
+            let nextOffset = max(response.results.count, 1)
             body += """
             <div class="pager"><a href="\(escape(searchURL(query: query, offset: nextOffset, tab: "web")))">Search for more »</a></div>
             """
@@ -689,7 +727,9 @@ enum FocusSearchPage {
             body += "</div>"
         }
         if hasMore {
-            let nextOffset = offset + max(images.count, 1)
+            // The grid holds every image loaded so far, so the next source
+            // batch starts right after the last one shown.
+            let nextOffset = max(images.count, 1)
             body += """
             <div class="pager"><a href="\(escape(searchURL(query: query, offset: nextOffset, tab: "images")))">Search for more images »</a></div>
             """

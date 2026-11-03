@@ -268,15 +268,30 @@ final class BrowserModel: NSObject, ObservableObject {
         Task { @MainActor [weak self] in
             guard let self else { return }
             if tab == "images" {
-                let fetched = await FocusSearchService.shared.imageResults(for: query, offset: offset)
-                guard !Task.isCancelled else { return }
-                let shown = Array(fetched.prefix(FocusSearchService.pageSize))
-                let hasMore = fetched.count >= FocusSearchService.pageSize
-                self.webView.loadHTMLString(
-                    FocusSearchPage.imagesPage(query: query, images: shown, offset: offset, hasMore: hasMore),
-                    baseURL: nil
-                )
-                BrowserLogStore.shared.record("Focus search · \(shown.count) image results")
+                if offset == 0 {
+                    let fetched = await FocusSearchService.shared.imageResults(for: query, offset: 0)
+                    guard !Task.isCancelled else { return }
+                    let shown = Array(fetched.prefix(FocusSearchService.pageSize))
+                    let hasMore = fetched.count >= FocusSearchService.pageSize
+                    self.webView.loadHTMLString(
+                        FocusSearchPage.imagesPage(query: query, images: shown, offset: offset, hasMore: hasMore),
+                        baseURL: nil
+                    )
+                    BrowserLogStore.shared.record("Focus search · \(shown.count) image results")
+                } else {
+                    // "Search for more" re-renders with every image loaded so
+                    // far: the earlier tiles stay in the grid, the new batch
+                    // is appended to it.
+                    let target = offset + FocusSearchService.pageSize
+                    let fetched = await FocusSearchService.shared.accumulatedImageResults(for: query, upTo: target)
+                    guard !Task.isCancelled else { return }
+                    let hasMore = fetched.count >= target
+                    self.webView.loadHTMLString(
+                        FocusSearchPage.imagesPage(query: query, images: fetched, offset: offset, hasMore: hasMore),
+                        baseURL: nil
+                    )
+                    BrowserLogStore.shared.record("Focus search · \(fetched.count) image results total")
+                }
             } else if offset == 0 {
                 let response = await FocusSearchService.shared.search(query)
                 guard !Task.isCancelled else { return }
@@ -297,16 +312,20 @@ final class BrowserModel: NSObject, ObservableObject {
                 }
                 BrowserLogStore.shared.record("Focus search · \(pageResponse.results.count) results\(dnsNote)")
             } else {
-                let fetched = await FocusSearchService.shared.webResults(for: query, offset: offset)
+                // "Search for more" re-renders with every result loaded so
+                // far: the earlier results stay on the page, the new batch
+                // is appended below them.
+                let target = offset + FocusSearchService.pageSize
+                let fetched = await FocusSearchService.shared.accumulatedWebResults(for: query, upTo: target)
                 guard !Task.isCancelled else { return }
                 var pageResponse = FocusSearchResponse()
-                pageResponse.results = Array(fetched.prefix(FocusSearchService.pageSize))
-                let hasMore = fetched.count >= FocusSearchService.pageSize
+                pageResponse.results = fetched
+                let hasMore = fetched.count >= target
                 self.webView.loadHTMLString(
                     FocusSearchPage.resultsPage(query: query, response: pageResponse, offset: offset, hasMore: hasMore),
                     baseURL: nil
                 )
-                BrowserLogStore.shared.record("Focus search · \(pageResponse.results.count) more results")
+                BrowserLogStore.shared.record("Focus search · \(fetched.count) results total")
             }
         }
     }
