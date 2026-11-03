@@ -5,8 +5,10 @@ lightweight engine that runs **Chrome-style extensions**.
 
 ## What it does
 
-- **Private by default** — every session runs in an ephemeral data store. Nothing is
-  saved between sessions, and the big erase button wipes everything on demand.
+- **Private by default** — every session runs in an ephemeral data store, and the
+  big erase button wipes everything on demand. "Keep cookies and sign-ins" (on by
+  default, off in incognito) stores cookies persistently so website logins survive
+  erases and relaunches; erasing always asks first whether to clear them too.
 - **Incognito mode** — a toggle (glasses button in the bar, or in Settings) that tints
   the interface, shows an "Incognito" pill, hides page content in the app switcher, and
   wipes the session whenever you turn it on or off.
@@ -19,11 +21,28 @@ lightweight engine that runs **Chrome-style extensions**.
 - **Tracker blocking** — a WebKit content rule list blocks requests to ~35 well-known
   advertising and analytics domains. The shield in the address bar shows how many
   tracking resources a page attempted to load.
+- **Smart address bar** — it shows the full URL of the page you're on, and
+  domain-shaped input ("anything.com", "news.site.org", an IP, or "domain.tld/path")
+  is resolved over DNS first: real sites launch, dead ones fall back to a search.
 - **Browser logs** — Settings shows the latest 100 navigation and session events in
   memory only, without URL paths, search terms, or page content.
 - **Customizable** — pick the accent color, choose which engine the address bar
   sends searches to (or supply a custom search URL template), open an optional
-  homepage in new tabs, and set the page zoom; all saved on device in Settings.
+  homepage in new tabs, set the page zoom, switch between the default and a
+  minimalist alternate app icon, and turn on Minimalistic mode to strip the
+  interface down to the essentials; all saved on device in Settings.
+- **Own search engine** — "Focus Search" is the default engine: searching
+  loads a classic search-engine results page right in the tab — white page,
+  colored wordmark, search box, Web and Images tabs, green breadcrumbs,
+  link-blue titles, snippets, instant answers, and "Search for more" loading
+  10 more results at a time — built from web results parsed out of DuckDuckGo's
+  lightweight HTML endpoints, with the Images tab trying Google's servers
+  first, then Bing and DuckDuckGo as fallbacks (each attempt logged, and
+  SafeSearch off on all of them so image results are not pre-filtered). Domain
+  verification over DNS-over-HTTPS is an
+  optional toggle (plenty of open-source sites aren't "verified"); with it on,
+  domain-shaped terms get an "open directly" link. Tapping a result navigates
+  the tab like any web page.
 - **Runs Chrome-style extensions** — drop any folder with a Chrome `manifest.json`
   into the app's `Extensions` folder and it loads. Two sample extensions are bundled
   and enabled on first launch.

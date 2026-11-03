@@ -39,6 +39,9 @@ final class BrowserModel: NSObject, ObservableObject {
     init(dataStore: WKWebsiteDataStore = .nonPersistent()) {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore
+        // Videos stay inline where they are: never jump into
+        // picture-in-picture when the page scrolls or the app backgrounds.
+        configuration.allowsPictureInPictureMediaPlayback = false
         let controller = WKUserContentController()
         configuration.userContentController = controller
         webView = WKWebView(frame: .zero, configuration: configuration)
@@ -175,20 +178,137 @@ final class BrowserModel: NSObject, ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        var url: URL?
+        // An explicit scheme navigates exactly as typed.
         if let candidate = URL(string: trimmed),
            let scheme = candidate.scheme?.lowercased(),
            scheme == "http" || scheme == "https" {
-            url = candidate
-        } else if !trimmed.contains(" "), let candidate = URL(string: "https://" + trimmed), candidate.host != nil {
-            url = candidate
-        } else {
-            url = CustomizationStore.shared.searchURL(for: trimmed)
+            navigate(to: candidate)
+            return
         }
-        guard let url else { return }
-        addressText = url.host ?? trimmed
+
+        // Domain-shaped input — "anything.com", "news.site.org", an IP, or a
+        // domain with a path — is a site candidate: it gets resolved first,
+        // so real sites launch and dead addresses fall back to a search
+        // instead of dead-ending on a host that cannot resolve.
+        if let candidate = Self.siteURL(for: trimmed) {
+            let host = candidate.host ?? ""
+            if Self.isIPv4(host) {
+                navigate(to: candidate)
+                return
+            }
+            addressText = trimmed
+            BrowserLogStore.shared.record("Checking address · \(host)")
+            Task { [weak self] in
+                let resolves = await FocusSearchService.shared.hostResolves(host)
+                await MainActor.run {
+                    guard let self else { return }
+                    if resolves {
+                        self.navigate(to: candidate)
+                    } else {
+                        self.performSearch(for: trimmed)
+                    }
+                }
+            }
+            return
+        }
+
+        performSearch(for: trimmed)
+    }
+
+    /// The site address the term points to, when it looks like one: bare
+    /// domains and IPs ("example.com", "1.2.3.4") or a domain with a path
+    /// ("example.com/shop"). Sentences and single words aren't site addresses.
+    static func siteURL(for text: String) -> URL? {
+        guard !text.contains(" ") else { return nil }
+        if let domain = FocusSearchService.domainCandidate(for: text) {
+            return URL(string: "https://" + domain)
+        }
+        guard let url = URL(string: "https://" + text),
+              let host = url.host,
+              FocusSearchService.domainCandidate(for: host) != nil else { return nil }
+        return url
+    }
+
+    private static func isIPv4(_ host: String) -> Bool {
+        let labels = host.split(separator: ".")
+        return labels.count == 4 && labels.allSatisfy { $0.allSatisfy(\.isNumber) }
+    }
+
+    private func navigate(to url: URL) {
+        // The address bar shows the full URL of the page being opened.
+        addressText = url.absoluteString
         BrowserLogStore.shared.record("Navigation requested · \(url.host ?? "unknown host")")
         webView.load(URLRequest(url: url))
+    }
+
+    /// Whatever the engine choice dictates for non-address input: Focus
+    /// Search renders its own results page; other engines open their site.
+    private func performSearch(for text: String) {
+        if CustomizationStore.shared.searchEngine == .focus {
+            renderFocusSearch(query: text, offset: 0, tab: "web")
+            return
+        }
+        guard let url = CustomizationStore.shared.searchURL(for: text) else { return }
+        navigate(to: url)
+    }
+
+    /// Focus Search renders its results as an HTML page loaded straight into
+    /// this tab's web view — a real search-engine results page, with the
+    /// page's own search box and "More results" link navigating back into the
+    /// engine through the focussearch:// scheme (intercepted in
+    /// decidePolicyFor), so searching, paging and back all work in the tab.
+    func renderFocusSearch(query: String, offset: Int, tab: String = "web") {
+        // HTML-string loads have no URL, so the start screen is retired here
+        // and the address bar shows the query itself.
+        isStart = false
+        displayedURL = nil
+        addressText = query
+        isLoading = false
+        webView.loadHTMLString(FocusSearchPage.searchingPage(query: query, tab: tab), baseURL: nil)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if tab == "images" {
+                let fetched = await FocusSearchService.shared.imageResults(for: query, offset: offset)
+                guard !Task.isCancelled else { return }
+                let shown = Array(fetched.prefix(FocusSearchService.pageSize))
+                let hasMore = fetched.count >= FocusSearchService.pageSize
+                self.webView.loadHTMLString(
+                    FocusSearchPage.imagesPage(query: query, images: shown, offset: offset, hasMore: hasMore),
+                    baseURL: nil
+                )
+                BrowserLogStore.shared.record("Focus search · \(shown.count) image results")
+            } else if offset == 0 {
+                let response = await FocusSearchService.shared.search(query)
+                guard !Task.isCancelled else { return }
+                var pageResponse = response
+                pageResponse.results = Array(response.results.prefix(FocusSearchService.pageSize))
+                let hasMore = response.results.count >= FocusSearchService.pageSize
+                self.webView.loadHTMLString(
+                    FocusSearchPage.resultsPage(query: query, response: pageResponse, offset: offset, hasMore: hasMore),
+                    baseURL: nil
+                )
+                let dnsNote: String
+                if response.directSite == nil {
+                    dnsNote = ""
+                } else if CustomizationStore.shared.verifyDomains {
+                    dnsNote = " · DNS check via \(EncryptedDNSManager.shared.resolver.rawValue)"
+                } else {
+                    dnsNote = " · direct link"
+                }
+                BrowserLogStore.shared.record("Focus search · \(pageResponse.results.count) results\(dnsNote)")
+            } else {
+                let fetched = await FocusSearchService.shared.webResults(for: query, offset: offset)
+                guard !Task.isCancelled else { return }
+                var pageResponse = FocusSearchResponse()
+                pageResponse.results = Array(fetched.prefix(FocusSearchService.pageSize))
+                let hasMore = fetched.count >= FocusSearchService.pageSize
+                self.webView.loadHTMLString(
+                    FocusSearchPage.resultsPage(query: query, response: pageResponse, offset: offset, hasMore: hasMore),
+                    baseURL: nil
+                )
+                BrowserLogStore.shared.record("Focus search · \(pageResponse.results.count) more results")
+            }
+        }
     }
 
     func toggleReload() {
@@ -315,7 +435,8 @@ extension BrowserModel: WKNavigationDelegate, WKUIDelegate {
               url.absoluteString != "about:blank" else { return }
         isStart = false
         displayedURL = url
-        addressText = url.host ?? url.absoluteString
+        // The address bar keeps showing the full URL of the page you're on.
+        addressText = url.absoluteString
         trackersSeen = 0
     }
 
@@ -342,6 +463,27 @@ extension BrowserModel: WKNavigationDelegate, WKUIDelegate {
         guard webView === self.webView else { return }
         isLoading = false
         recordNavigationFailure(error, in: webView)
+    }
+
+    /// Intercepts the Focus engine's own scheme — the in-page search box and
+    /// its "More results" pagination link — and renders a fresh results page
+    /// instead of navigating. Everything else loads normally.
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url,
+              url.scheme == FocusSearchPage.scheme else {
+            decisionHandler(.allow)
+            return
+        }
+        decisionHandler(.cancel)
+        guard webView === self.webView else { return }
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let query = components?.queryItems?.first { $0.name == "q" }?.value ?? ""
+        let offset = components?.queryItems?.first { $0.name == "offset" }?.value.flatMap(Int.init) ?? 0
+        let tab = components?.queryItems?.first { $0.name == "tab" }?.value ?? "web"
+        guard !query.isEmpty else { return }
+        BrowserLogStore.shared.record("Focus search requested")
+        renderFocusSearch(query: query, offset: offset, tab: tab)
     }
 
     /// Keep user-tapped links in this tab and refuse unsolicited windows.

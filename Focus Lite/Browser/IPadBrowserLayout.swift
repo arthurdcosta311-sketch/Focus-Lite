@@ -64,12 +64,14 @@ struct IPadBrowserLayout: View {
                 Text("Focus Lite")
                     .font(.headline)
                 Spacer()
-                Button {
-                    withAnimation { manager.toggleIncognito() }
-                } label: {
-                    Image(systemName: "eyeglasses")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(manager.isIncognito ? Theme.incognito : Color.white)
+                if !CustomizationStore.shared.minimalisticMode {
+                    Button {
+                        withAnimation { manager.toggleIncognito() }
+                    } label: {
+                        Image(systemName: "eyeglasses")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(manager.isIncognito ? Theme.incognito : Color.white)
+                    }
                 }
             }
 
@@ -96,10 +98,12 @@ struct IPadBrowserLayout: View {
 
             Divider()
             HStack(spacing: 10) {
-                Button(action: manager.erase) {
-                    Label("Erase", systemImage: "trash")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
+                if !CustomizationStore.shared.minimalisticMode {
+                    Button(action: manager.requestErase) {
+                        Label("Erase", systemImage: "trash")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Theme.accent)
+                    }
                 }
                 Button { manager.showSettings = true } label: {
                     Label("Extensions", systemImage: "puzzlepiece.extension")
@@ -138,10 +142,12 @@ struct IPadBrowserLayout: View {
 
                 Spacer()
 
-                Button(action: manager.erase) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
+                if !CustomizationStore.shared.minimalisticMode {
+                    Button(action: manager.requestErase) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Theme.accent)
+                    }
                 }
                 Button { manager.showSettings = true } label: {
                     Image(systemName: "puzzlepiece.extension")

@@ -103,6 +103,9 @@ struct Focus_LiteTests {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let store = CustomizationStore(defaults: defaults)
+        // Focus Search is the default engine now; URL building is pinned to
+        // the classic engines explicitly.
+        store.searchEngine = .duckduckgo
         #expect(store.searchURL(for: "privacy browser")?.host == "duckduckgo.com")
         #expect(store.searchURL(for: "privacy browser")?.query == "q=privacy%20browser")
 
@@ -139,9 +142,60 @@ struct Focus_LiteTests {
         let store = CustomizationStore(defaults: defaults)
         store.accent = .mint
         store.pageZoom = 1.5
+        store.keepCookies = true
 
         #expect(CustomizationStore(defaults: defaults).accent == .mint)
         #expect(CustomizationStore(defaults: defaults).pageZoom == 1.5)
+        #expect(CustomizationStore(defaults: defaults).keepCookies == true)
+    }
+
+    /// Cookies stay by default: a fresh install has no stored choice yet and
+    /// gets the persistent store, while a stored opt-out is respected.
+    @Test func cookiesStayByDefaultUntilOptedOut() {
+        let (defaults, suiteName) = makeTestDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        #expect(CustomizationStore(defaults: defaults).keepCookies)
+
+        let store = CustomizationStore(defaults: defaults)
+        store.keepCookies = false
+        #expect(!CustomizationStore(defaults: defaults).keepCookies)
+    }
+
+    /// Domain-shaped input is a site candidate that gets resolved before the
+    /// browser decides between opening it and searching; sentences and
+    /// non-domain dotted terms never become site addresses.
+    @Test func domainShapedInputBecomesSiteAddresses() {
+        #expect(BrowserModel.siteURL(for: "example.com")?.host == "example.com")
+        #expect(BrowserModel.siteURL(for: "Example.COM")?.host == "example.com")
+        #expect(BrowserModel.siteURL(for: "example.com/shop")?.host == "example.com")
+        #expect(BrowserModel.siteURL(for: "1.2.3.4")?.host == "1.2.3.4")
+
+        #expect(BrowserModel.siteURL(for: "hello world.com") == nil)
+        #expect(BrowserModel.siteURL(for: "3.14") == nil)
+        #expect(BrowserModel.siteURL(for: "cute cats") == nil)
+        #expect(BrowserModel.siteURL(for: "localhost") == nil)
+    }
+
+    /// Keeping cookies during an erase must spare the cookie data type only:
+    /// everything else (caches, storages, disk data) still gets wiped.
+    @Test func erasingCanSpareCookiesAndSignInData() {
+        #expect(TabManager.dataTypesToErase(clearCookies: true)
+            .contains(WKWebsiteDataTypeCookies))
+
+        let spared = TabManager.dataTypesToErase(clearCookies: false)
+        #expect(!spared.contains(WKWebsiteDataTypeCookies))
+        #expect(spared.contains(WKWebsiteDataTypeLocalStorage))
+        #expect(spared.count < TabManager.dataTypesToErase(clearCookies: true).count)
+    }
+
+    /// The alternate icon only works when the build declares it: the asset
+    /// catalog compiler must include the Minimal set, or the car never
+    /// contains it and setAlternateIconName fails at runtime.
+    @Test func alternateAppIconIsDeclared() {
+        let alternateIcons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any]
+        let minimal = (alternateIcons?["CFBundleAlternateIcons"] as? [String: Any])?["Minimal"]
+        #expect(minimal != nil)
     }
 
 }

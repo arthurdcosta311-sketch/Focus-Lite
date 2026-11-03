@@ -4,6 +4,7 @@
 //
 
 import NetworkExtension
+import UIKit
 import SwiftUI
 
 struct SettingsSheet: View {
@@ -14,6 +15,7 @@ struct SettingsSheet: View {
     @ObservedObject private var customization = CustomizationStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var vpnPassword = ""
+    @State private var activeIcon: String? = UIApplication.shared.alternateIconName
 
     private var vpnFieldsLocked: Bool {
         switch vpnManager.connectionStatus {
@@ -87,6 +89,8 @@ struct SettingsSheet: View {
                             .keyboardType(.URL)
                     }
 
+                    Toggle("Verify domains over encrypted DNS", isOn: $customization.verifyDomains)
+
                     Toggle("Open homepage in new tabs", isOn: $customization.homepageEnabled)
                     if customization.homepageEnabled {
                         TextField("Homepage address", text: $customization.homepageText)
@@ -94,6 +98,8 @@ struct SettingsSheet: View {
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
                     }
+
+                    Toggle("Minimalistic mode", isOn: $customization.minimalisticMode)
 
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -108,7 +114,18 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Customize")
                 } footer: {
-                    Text("The accent colors the interface, the engine the address bar sends searches to, and the zoom of every page. The homepage opens in tabs created afterwards. A custom search template is an http(s) URL containing %s where the search term goes. These choices are saved on this device.")
+                    Text("The accent colors the interface, the engine the address bar sends searches to, and the zoom of every page. The homepage opens in tabs created afterwards. A custom search template is an http(s) URL containing %s where the search term goes. Focus Search is Focus Lite's own engine and the default: it loads a classic results page with Web and Images tabs right in the tab, and its optional domain verification uses the encrypted DNS resolver chosen in Privacy. Minimalistic mode hides the start-page shortcuts and the incognito and erase buttons — those stay available in Settings. These choices are saved on this device.")
+                }
+
+                Section {
+                    HStack(spacing: 12) {
+                        iconButton(title: "Default", symbol: "shield.lefthalf.filled", name: nil)
+                        iconButton(title: "Minimal", symbol: "shield", name: "Minimal")
+                    }
+                } header: {
+                    Text("App icon")
+                } footer: {
+                    Text("The icon shown on the Home Screen. iOS asks for confirmation in its own dialog before the icon changes.")
                 }
 
                 Section {
@@ -122,6 +139,10 @@ struct SettingsSheet: View {
 
                     Toggle(isOn: $manager.popupBlockerEnabled) {
                         Label("Block pop-ups", systemImage: "hand.raised")
+                    }
+
+                    Toggle(isOn: $customization.keepCookies) {
+                        Label("Keep cookies and sign-ins", systemImage: "person.badge.key")
                     }
 
                     Toggle(isOn: Binding(
@@ -154,7 +175,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Privacy")
                 } footer: {
-                    Text("Incognito tints the interface and hides page content in the app switcher; switching modes wipes the session. Pop-ups from script-opened windows are blocked by default, while tapped links stay in the current tab. Encrypted DNS protects lookups from the local network, but the resolver can see them; it is not a VPN.")
+                    Text("Incognito tints the interface and hides page content in the app switcher; switching modes wipes the session. Pop-ups from script-opened windows are blocked by default, while tapped links stay in the current tab. Keep cookies and sign-ins is on by default so website logins survive erases and relaunches on this device; erasing always asks first whether to clear them too, and you can turn keeping off entirely. Encrypted DNS protects lookups from the local network, but the resolver can see them; it is not a VPN.")
                 }
 
                 if !manager.allowedPopupSites.isEmpty {
@@ -242,7 +263,7 @@ struct SettingsSheet: View {
                     LabeledRow("Pages loaded", "\(manager.pagesVisited)")
                     LabeledRow("Erasures", "\(manager.erasures)")
                     Button(role: .destructive) {
-                        manager.erase()
+                        manager.requestErase()
                     } label: {
                         Label("Erase browsing data now", systemImage: "trash")
                     }
@@ -268,7 +289,64 @@ struct SettingsSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .confirmationDialog(
+                CustomizationStore.shared.keepCookies
+                    ? "Clear cookies and sign-ins too?"
+                    : "Erase browsing data?",
+                isPresented: $manager.showEraseConfirmation,
+                titleVisibility: .visible
+            ) {
+                if CustomizationStore.shared.keepCookies {
+                    Button("Erase everything, including cookies and sign-ins", role: .destructive) {
+                        manager.erase(clearCookies: true)
+                    }
+                    Button("Erase history only, keep cookies and sign-ins") {
+                        manager.erase(clearCookies: false)
+                    }
+                } else {
+                    Button("Erase everything", role: .destructive) {
+                        manager.erase(clearCookies: true)
+                    }
+                    Button("Turn on Keep cookies and sign-ins") {
+                        CustomizationStore.shared.keepCookies = true
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(CustomizationStore.shared.keepCookies
+                     ? "Cookies and website sign-ins are set to stay on this device. Keep them, or wipe them along with the history."
+                     : "Cookies and sign-ins die with every session. You can start keeping them instead.")
+            }
         }
+    }
+
+    /// Switches between the bundled icons. iOS itself asks the user to confirm
+/// the change, so the completion only refreshes which tile is marked active.
+    private func iconButton(title: String, symbol: String, name: String?) -> some View {
+        Button {
+            guard UIApplication.shared.supportsAlternateIcons else { return }
+            UIApplication.shared.setAlternateIconName(name) { _ in
+                activeIcon = UIApplication.shared.alternateIconName
+            }
+        } label: {
+            VStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(activeIcon == name ? Theme.accent : .secondary)
+                    .frame(maxWidth: .infinity, minHeight: 64)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(
+                                activeIcon == name ? Theme.accent.opacity(0.6) : Color.white.opacity(0.08),
+                                lineWidth: activeIcon == name ? 2 : 1
+                            )
+                    )
+                Text(title)
+                    .font(.subheadline)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private func extensionRow(_ ext: BrowserExtension) -> some View {

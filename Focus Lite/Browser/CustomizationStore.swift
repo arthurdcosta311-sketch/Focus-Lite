@@ -30,12 +30,13 @@ enum Accent: String, CaseIterable, Identifiable {
 /// The engines the address bar can send a plain search term to. The query is
 /// passed through URLComponents, so it is encoded correctly for each engine.
 enum SearchEngine: String, CaseIterable, Identifiable {
-    case duckduckgo, google, bing, brave, startpage, ecosia, qwant, custom
+    case focus, duckduckgo, google, bing, brave, startpage, ecosia, qwant, custom
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
+        case .focus: return "Focus Search · built-in"
         case .duckduckgo: return "DuckDuckGo"
         case .google: return "Google"
         case .bing: return "Bing"
@@ -50,6 +51,8 @@ enum SearchEngine: String, CaseIterable, Identifiable {
     func searchURL(for query: String) -> URL? {
         var components: URLComponents?
         switch self {
+        case .focus:
+            return nil // Handled by BrowserModel, which renders the results page in the tab.
         case .duckduckgo:
             components = URLComponents(string: "https://duckduckgo.com/")
         case .google:
@@ -97,17 +100,39 @@ final class CustomizationStore: ObservableObject {
     @Published var pageZoom: Double {
         didSet { defaults.set(pageZoom, forKey: Keys.pageZoom) }
     }
+    /// Strips the interface down: no start-page shortcuts or tagline, a
+    /// single-row bar on iPhone, and the incognito/erase buttons move to
+    /// Settings only.
+    @Published var minimalisticMode: Bool {
+        didSet { defaults.set(minimalisticMode, forKey: Keys.minimalisticMode) }
+    }
+    /// Focus Search's optional DNS check for typed domains. Off by default:
+    /// plenty of small and open-source sites aren't registered with the big
+    /// public resolvers, so verification is only for people who want it.
+    @Published var verifyDomains: Bool {
+        didSet { defaults.set(verifyDomains, forKey: Keys.verifyDomains) }
+    }
+    /// When on (the default), cookies and website sign-ins live in the
+    /// persistent store and survive erases (unless the erase prompt clears
+    /// them too) and relaunches. Turning it off returns to fully ephemeral
+    /// browsing, where cookies die with every session.
+    @Published var keepCookies: Bool {
+        didSet { defaults.set(keepCookies, forKey: Keys.keepCookies) }
+    }
 
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         accent = Accent(rawValue: defaults.string(forKey: Keys.accent) ?? "") ?? .tangerine
-        searchEngine = SearchEngine(rawValue: defaults.string(forKey: Keys.searchEngine) ?? "") ?? .duckduckgo
+        searchEngine = SearchEngine(rawValue: defaults.string(forKey: Keys.searchEngine) ?? "") ?? .focus
         customSearchTemplate = defaults.string(forKey: Keys.customSearchTemplate) ?? "https://duckduckgo.com/?q=%s"
         homepageEnabled = defaults.bool(forKey: Keys.homepageEnabled)
         homepageText = defaults.string(forKey: Keys.homepageText) ?? ""
         pageZoom = defaults.object(forKey: Keys.pageZoom) as? Double ?? 1.0
+        minimalisticMode = defaults.bool(forKey: Keys.minimalisticMode)
+        verifyDomains = defaults.bool(forKey: Keys.verifyDomains)
+        keepCookies = defaults.object(forKey: Keys.keepCookies) as? Bool ?? true
     }
 
     private enum Keys {
@@ -117,6 +142,9 @@ final class CustomizationStore: ObservableObject {
         static let homepageEnabled = "customization.homepageEnabled"
         static let homepageText = "customization.homepageText"
         static let pageZoom = "customization.pageZoom"
+        static let minimalisticMode = "customization.minimalisticMode"
+        static let verifyDomains = "customization.verifyDomains"
+        static let keepCookies = "customization.keepCookies"
     }
 
     var accentColor: Color { accent.color }

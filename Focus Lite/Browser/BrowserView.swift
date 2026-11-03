@@ -43,6 +43,34 @@ struct BrowserView: View {
         .sheet(isPresented: $manager.showSettings) {
             SettingsSheet(manager: manager)
         }
+        .confirmationDialog(
+            CustomizationStore.shared.keepCookies
+                ? "Clear cookies and sign-ins too?"
+                : "Erase browsing data?",
+            isPresented: $manager.showEraseConfirmation,
+            titleVisibility: .visible
+        ) {
+            if CustomizationStore.shared.keepCookies {
+                Button("Erase everything, including cookies and sign-ins", role: .destructive) {
+                    manager.erase(clearCookies: true)
+                }
+                Button("Erase history only, keep cookies and sign-ins") {
+                    manager.erase(clearCookies: false)
+                }
+            } else {
+                Button("Erase everything", role: .destructive) {
+                    manager.erase(clearCookies: true)
+                }
+                Button("Turn on Keep cookies and sign-ins") {
+                    CustomizationStore.shared.keepCookies = true
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(CustomizationStore.shared.keepCookies
+                 ? "Cookies and website sign-ins are set to stay on this device. Keep them, or wipe them along with the history."
+                 : "Cookies and sign-ins die with every session. You can start keeping them instead.")
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 if UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular {
@@ -275,10 +303,13 @@ private struct PhoneBottomBar: View {
     let isWide: Bool
 
     var body: some View {
+        let minimal = CustomizationStore.shared.minimalisticMode
         Group {
-            if isWide {
+            if isWide || minimal {
                 HStack(spacing: 10) {
-                    incognitoButton
+                    if !minimal {
+                        incognitoButton
+                    }
                     tabsButton
 
                     if !model.isStart {
@@ -292,7 +323,9 @@ private struct PhoneBottomBar: View {
                         reloadButton
                     }
 
-                    eraseButton
+                    if !minimal {
+                        eraseButton
+                    }
                     settingsButton
                 }
             } else {
@@ -378,7 +411,7 @@ private struct PhoneBottomBar: View {
     }
 
     private var eraseButton: some View {
-        Button(action: manager.erase) {
+        Button(action: manager.requestErase) {
             Image(systemName: "trash")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.accent)
@@ -410,8 +443,7 @@ private struct TabSwitcher: View {
                         .font(.title3.bold())
                     Spacer()
                     Button(role: .destructive) {
-                        withAnimation { manager.erase() }
-                        manager.showTabSwitcher = false
+                        withAnimation { manager.requestErase() }
                     } label: {
                         Text("Close All")
                             .font(.subheadline.weight(.semibold))
@@ -539,6 +571,7 @@ private struct StartScreen: View {
     ]
 
     var body: some View {
+        let minimal = CustomizationStore.shared.minimalisticMode
         VStack(spacing: 24) {
             Spacer()
             ZStack {
@@ -552,36 +585,42 @@ private struct StartScreen: View {
             VStack(spacing: 6) {
                 Text("Focus Lite")
                     .font(.system(size: 32, weight: .bold, design: .rounded))
-                Text("A featherweight, private browser.")
-                    .foregroundStyle(.secondary)
+                if !minimal {
+                    Text("A featherweight, private browser.")
+                        .foregroundStyle(.secondary)
+                }
             }
             VStack(spacing: 4) {
                 Text("Search or type an address in the bar below.")
                     .font(.subheadline)
-                Text("Every session starts fresh — nothing is saved.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                if !minimal {
+                    Text("Every session starts fresh — nothing is saved.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .multilineTextAlignment(.center)
 
-            HStack(spacing: 14) {
-                ForEach(links, id: \.title) { link in
-                    Button {
-                        model.load(link.url)
-                    } label: {
-                        VStack(spacing: 8) {
-                            Image(systemName: link.symbol)
-                                .font(.system(size: 20, weight: .semibold))
-                            Text(link.title)
-                                .font(.caption)
+            if !minimal {
+                HStack(spacing: 14) {
+                    ForEach(links, id: \.title) { link in
+                        Button {
+                            model.load(link.url)
+                        } label: {
+                            VStack(spacing: 8) {
+                                Image(systemName: link.symbol)
+                                    .font(.system(size: 20, weight: .semibold))
+                                Text(link.title)
+                                    .font(.caption)
+                            }
+                            .frame(width: 74, height: 74)
+                            .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                         }
-                        .frame(width: 74, height: 74)
-                        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.top, 8)
             }
-            .padding(.top, 8)
 
             Spacer()
             Spacer()
