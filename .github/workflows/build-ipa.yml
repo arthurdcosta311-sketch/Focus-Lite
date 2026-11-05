@@ -68,7 +68,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ format('v{0}', steps.version.outputs.version) }}
-          name: ${{ format('Focus Lite v{0}', steps.version.outputs.version) }}
+          name: ${{ format('v{0} {{merry Christmas}}', steps.version.outputs.version) }}
           body: ${{ steps.channel.outputs.body }}
           prerelease: false
           files: FocusLite.ipa
