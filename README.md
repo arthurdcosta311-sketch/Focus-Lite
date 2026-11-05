@@ -83,17 +83,8 @@ Settings. Toggles apply from the next page load.
 options pages, and other privileged APIs beyond the table above.
 
 ## Building
-
-Open the project in Xcode and run, or use the Run button in the app this chat lives in.
-Targets iOS 17+; no third-party dependencies.
-
-**CI:** the *Build IPA* workflow on the Actions tab builds a Release archive, uploads
-an unsigned `FocusLite.ipa` artifact on every push to `main` (and on demand via
-*Run workflow*), and attaches it to a GitHub Release tagged after the app's version
-(e.g. `v1.1`). Pushes to the `preview` branch build the same IPA as an
-*FocusLite-ipa-preview* artifact attached to a `v2.8b` pre-release.
-Re-sign it with your own certificate to install on a device.
-
+everything is in releases and github actions
+- MERRY CHRISTMAS 
 ## License
 
 MIT — see [LICENSE](LICENSE).
