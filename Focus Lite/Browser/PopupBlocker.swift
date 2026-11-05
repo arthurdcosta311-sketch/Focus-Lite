@@ -12,7 +12,11 @@ enum PopupBlocker {
     private static let blockedHosts = [
         "doubleclick.net", "googlesyndication.com", "popads.net", "popcash.net",
         "propellerads.com", "onclickads.net", "adsterra.com", "adcash.com",
-        "zedo.com", "adnxs.com", "popmyads.com", "exoclick.com", "juicyads.com"
+        "zedo.com", "adnxs.com", "popmyads.com", "exoclick.com", "juicyads.com",
+        "hilltopads.net", "clickadu.com", "revenuehits.com", "mgid.com",
+        "monetag.com", "zeropark.com", "adskeeper.com", "trafficjunky.net",
+        "etology.com", "onclickalgo.com", "onclickperformance.com",
+        "pushlink.org", "pushmepush.com", "notification-works.com",
     ]
 
     static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
@@ -60,7 +64,10 @@ enum PopupBlocker {
     }
 
     static func isBlockedHost(_ url: URL?) -> Bool {
-        guard let host = normalizedHost(url?.host) else { return false }
-        return blockedHosts.contains { host == $0 || host.hasSuffix("." + $0) }
+        guard let url, let host = normalizedHost(url.host) else { return false }
+        if blockedHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) { return true }
+        // Known scam chains and redirect relays are never allowed to open a
+        // window either, even when blocking is on for everything else.
+        return BrowserModel.isBlacklistedScamDomain(url)
     }
 }

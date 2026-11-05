@@ -287,6 +287,7 @@ final class BrowserModel: NSObject, ObservableObject {
         "congrats", "luckydraw", "lucky-draw", "giveaway",
         "hacked", "device-damaged", "phone-damaged", "iphone-damaged",
         "iplogged", "you-have-been-selected", "claimyourprize", "claim-now",
+        "redirect",
     ]
 
     /// Whether a destination URL looks like a scareware or prize-scam page.
@@ -298,20 +299,41 @@ final class BrowserModel: NSObject, ObservableObject {
     }
 
     /// Base domains of known scam and malvertising chains: fake-VPN player
-    /// pre-landers and the click-fraud redirectors they bounce through.
-    /// Campaign keys and IDs in their URLs rotate constantly, so matching is
-    /// on the domain, never on the query.
+    /// pre-landers and the click-fraud redirectors they bounce through, the
+    /// Shopee marketplace in every region it operates, and the link
+    /// shorteners that wrap scam redirects. Campaign keys and IDs in their
+    /// URLs rotate constantly, so matching is on the domain, never on the
+    /// query.
     private static let blacklistedScamDomains: Set<String> = [
         "freedomnetvpn.com",
         "topsecureflow.com",
+        // Shopee — blocked in full.
+        "shopee.com", "shopee.sg", "shopee.tw", "shopee.vn", "shopee.ph",
+        "shopee.co.id", "shopee.co.th", "shopee.com.my", "shopee.com.br",
+        "shopee.cl", "shopee.mx",
+        // Link shorteners.
+        "bit.ly", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "is.gd",
+        "buff.ly", "adf.ly", "cutt.ly", "rebrand.ly", "tiny.cc", "bit.do",
+        "shorturl.at", "t.ly", "rb.gy", "s.id", "shorte.st", "sh.st",
+        "clk.sh",
     ]
 
-    /// Whether a URL's host is, or sits under, a blacklisted scam domain.
+    /// Words that mark a destination as a redirect relay whatever its
+    /// branding, matched on the base domain: a dedicated redirect domain
+    /// (redirect.zone, smart-redirect.io) is refused, while a legitimate
+    /// site's own redirect subdomain (redirect.example.com) is not.
+    private static let blacklistedHostKeywords: Set<String> = [
+        "redirect",
+    ]
+
+    /// Whether a URL's host is, or sits under, a blacklisted scam domain —
+    /// or is itself a redirect relay.
     static func isBlacklistedScamDomain(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased(), !host.isEmpty else { return false }
-        return blacklistedScamDomains.contains { domain in
-            host == domain || host.hasSuffix("." + domain)
+        if blacklistedScamDomains.contains(where: { host == $0 || host.hasSuffix("." + $0) }) {
+            return true
         }
+        return blacklistedHostKeywords.contains { baseDomain(for: host).contains($0) }
     }
 
     private func navigate(to url: URL) {

@@ -19,9 +19,11 @@ lightweight engine that runs **Chrome-style extensions**.
   them all.
 - **iPad layout** — on iPad the browser switches to a large-screen layout: a
   tab sidebar beside the page, with the controls in a toolbar above the content.
-- **Tracker blocking** — a WebKit content rule list blocks requests to ~35 well-known
-  advertising and analytics domains. The shield in the address bar shows how many
-  tracking resources a page attempted to load.
+- **Tracker blocking** — a WebKit content rule list blocks requests to
+  well-known advertising, analytics and pop-up ad networks, and a hard
+  blacklist refuses known scam domains, link shorteners, redirect relays and
+  the Shopee marketplace entirely. The shield in the address bar shows how
+  many tracking resources a page attempted to load.
 - **Smart address bar** — it shows the full URL of the page you're on, and
   domain-shaped input ("anything.com", "news.site.org", an IP, or "domain.tld/path")
   is resolved over DNS first: real sites launch, dead ones fall back to a search.

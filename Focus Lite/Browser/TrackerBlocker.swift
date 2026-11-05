@@ -13,10 +13,20 @@ enum TrackerBlocker {
         "criteo.com", "criteo.net", "taboola.com", "outbrain.com", "adnxs.com", "adsrvr.org",
         "pubmatic.com", "rubiconproject.com", "casalemedia.com", "openx.net", "bidswitch.net",
         "smartadserver.com", "amazon-adsystem.com", "appsflyer.com", "branch.io", "kochava.com",
-        "chartboost.com", "inmobi.com", "mopub.com", "moatads.com", "yieldmo.com"
+        "chartboost.com", "inmobi.com", "mopub.com", "moatads.com", "yieldmo.com",
+        // Mobile ad SDKs and demand-side trackers.
+        "adform.net", "applovin.com", "vungle.com", "adcolony.com", "tapjoy.com",
+        "bidr.io", "crwdcntrl.net", "demdex.net", "omtrdc.net", "everesttech.net",
+        "mathtag.com", "bluekai.com", "exelator.com", "agkn.com", "rlcdn.com",
+        "eyeota.net", "media.net", "revcontent.com", "mgid.com",
+        // Pop-up and pop-under ad networks, which double as trackers.
+        "popads.net", "popcash.net", "propellerads.com", "onclickads.net",
+        "adsterra.com", "adcash.com", "zedo.com", "exoclick.com", "juicyads.com",
+        "hilltopads.net", "clickadu.com", "revenuehits.com", "monetag.com",
+        "zeropark.com", "adskeeper.com", "trafficjunky.net", "etology.com",
     ]
 
-    private static let ruleListIdentifier = "focus.blockers.v1"
+    private static let ruleListIdentifier = "focus.blockers.v2"
     private static var cachedRuleList: WKContentRuleList?
     private static var pendingControllers: [WKUserContentController] = []
     private static var isPreparingRuleList = false
