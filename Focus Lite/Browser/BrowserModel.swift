@@ -307,6 +307,7 @@ final class BrowserModel: NSObject, ObservableObject {
     private static let blacklistedScamDomains: Set<String> = [
         "freedomnetvpn.com",
         "topsecureflow.com",
+        "onlineprotectsafe.com", // Phishing page posing as a security scanner.
         // Shopee — blocked in full.
         "shopee.com", "shopee.sg", "shopee.tw", "shopee.vn", "shopee.ph",
         "shopee.co.id", "shopee.co.th", "shopee.com.my", "shopee.com.br",
