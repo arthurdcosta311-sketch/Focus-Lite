@@ -595,9 +595,9 @@ private struct StartScreen: View {
 
     private let links: [(title: String, symbol: String, url: String)] = [
         ("Wikipedia", "book.fill", "https://en.wikipedia.org"),
-        ("DuckDuckGo", "magnifyingglass", "https://duckduckgo.com"),
+        ("Merry Christmas", "snowflake", "https://en.wikipedia.org/wiki/Christmas"),
         ("Hacker News", "newspaper.fill", "https://news.ycombinator.com"),
-        ("GitHub", "chevron.left.forwardslash.chevron.right", "https://github.com")
+        ("GitHub", "chevron.left.forwardslash.chevron.right", "https://github.com/arthurdcosta311-sketch")
     ]
 
     var body: some View {
