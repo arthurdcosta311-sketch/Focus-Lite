@@ -100,7 +100,3 @@ Re-sign it with your own certificate to install on a device.
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-## Rules
-
-See [what not do do.md](what%20not%20do%20do.md).
