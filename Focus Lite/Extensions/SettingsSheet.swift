@@ -282,7 +282,7 @@ struct SettingsSheet: View {
                 BrowserLogSettingsSection()
 
                 Section("About") {
-                    LabeledRow("Version", "3.6")
+                    LabeledRow("Version", "3.7")
                     Text("Focus Lite blocks known trackers with WebKit content rules, keeps the data store ephemeral, browses in tabs with a dedicated iPad layout, and runs Chrome-style extensions through a lightweight WebExtensions bridge.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
