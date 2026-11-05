@@ -297,6 +297,23 @@ final class BrowserModel: NSObject, ObservableObject {
         return fishyPhrases.contains { text.contains($0) }
     }
 
+    /// Base domains of known scam and malvertising chains: fake-VPN player
+    /// pre-landers and the click-fraud redirectors they bounce through.
+    /// Campaign keys and IDs in their URLs rotate constantly, so matching is
+    /// on the domain, never on the query.
+    private static let blacklistedScamDomains: Set<String> = [
+        "freedomnetvpn.com",
+        "topsecureflow.com",
+    ]
+
+    /// Whether a URL's host is, or sits under, a blacklisted scam domain.
+    static func isBlacklistedScamDomain(_ url: URL) -> Bool {
+        guard let host = url.host?.lowercased(), !host.isEmpty else { return false }
+        return blacklistedScamDomains.contains { domain in
+            host == domain || host.hasSuffix("." + domain)
+        }
+    }
+
     private func navigate(to url: URL) {
         // The address bar shows the full URL of the page being opened.
         addressText = url.absoluteString
@@ -567,6 +584,15 @@ extension BrowserModel: WKNavigationDelegate, WKUIDelegate {
                 url.scheme == "itms-services" ? "Opening over-the-air install" : "Opening App Store link"
             )
             UIApplication.shared.open(url)
+            return
+        }
+        // Blacklisted scam domains are refused outright, however the request
+        // arrives: a redirect into them, a tapped link, or a page resource
+        // loaded from them.
+        if Self.isBlacklistedScamDomain(url) {
+            decisionHandler(.cancel)
+            guard webView === self.webView else { return }
+            BrowserLogStore.shared.record("Scam domain blocked · \(url.host ?? "unknown host")")
             return
         }
         // Redirects — server hops, JavaScript or meta-refresh, anything that
