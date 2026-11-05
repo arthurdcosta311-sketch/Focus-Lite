@@ -35,6 +35,9 @@ final class BrowserModel: NSObject, ObservableObject {
     private var registeredExtensionWorldNames: Set<String> = []
     private var cancellables: Set<AnyCancellable> = []
     private var previewGeneration = 0
+    /// Set around the model's own loads. Those are the user's address-bar
+    /// choices, not redirects, so the redirect rule lets them through.
+    private var isUserInitiatedNavigation = false
 
     init(dataStore: WKWebsiteDataStore = .nonPersistent()) {
         let configuration = WKWebViewConfiguration()
@@ -240,10 +243,43 @@ final class BrowserModel: NSObject, ObservableObject {
         return labels.count == 4 && labels.allSatisfy { $0.allSatisfy(\.isNumber) }
     }
 
+    /// Whether two URLs belong to the same site or related domains:
+    /// identical hosts, or hosts sharing a base domain — one a subdomain of
+    /// the other (www.example.com and login.example.com, or example.com and
+    /// either). The redirect rule allows only these.
+    static func isSameOrRelatedSite(_ a: URL, _ b: URL) -> Bool {
+        guard let hostA = a.host?.lowercased(), let hostB = b.host?.lowercased(),
+              !hostA.isEmpty, !hostB.isEmpty else { return true }
+        if hostA == hostB { return true }
+        return baseDomain(for: hostA) == baseDomain(for: hostB)
+    }
+
+    /// Common second-level suffixes, where the site's base domain needs three
+    /// labels (example.co.uk, not co.uk).
+    private static let multiLabelSuffixes: Set<String> = [
+        "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk",
+        "com.au", "net.au", "co.jp", "ne.jp", "or.jp",
+        "com.br", "com.mx", "co.in", "co.nz", "co.za",
+        "com.sg", "com.tr", "com.cn", "com.hk", "co.il",
+    ]
+
+    /// The host's base domain: the last two labels, three for hosts under a
+    /// common second-level suffix.
+    private static func baseDomain(for host: String) -> String {
+        let labels = host.split(separator: ".")
+        guard labels.count > 2 else { return host }
+        let lastTwo = labels.suffix(2).joined(separator: ".")
+        if multiLabelSuffixes.contains(lastTwo) {
+            return labels.suffix(3).joined(separator: ".")
+        }
+        return lastTwo
+    }
+
     private func navigate(to url: URL) {
         // The address bar shows the full URL of the page being opened.
         addressText = url.absoluteString
         BrowserLogStore.shared.record("Navigation requested · \(url.host ?? "unknown host")")
+        isUserInitiatedNavigation = true
         webView.load(URLRequest(url: url))
     }
 
@@ -510,6 +546,23 @@ extension BrowserModel: WKNavigationDelegate, WKUIDelegate {
             )
             UIApplication.shared.open(url)
             return
+        }
+        // Redirects — server hops, JavaScript or meta-refresh, anything that
+        // navigates without a user tap — only continue when they stay on the
+        // site the tab is already on or a related domain. Main-frame loads
+        // only; the page's own images and scripts are never touched.
+        if webView === self.webView,
+           navigationAction.targetFrame?.isMainFrame == true,
+           navigationAction.navigationType == .other {
+            if isUserInitiatedNavigation {
+                isUserInitiatedNavigation = false
+            } else if let currentPage = webView.url ?? displayedURL,
+                      let destination = url.host, !destination.isEmpty,
+                      !Self.isSameOrRelatedSite(currentPage, url) {
+                decisionHandler(.cancel)
+                BrowserLogStore.shared.record("Cross-site redirect blocked · \(destination)")
+                return
+            }
         }
         guard url.scheme == FocusSearchPage.scheme else {
             decisionHandler(.allow)
