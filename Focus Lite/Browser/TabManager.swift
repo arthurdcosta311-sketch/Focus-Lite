@@ -324,10 +324,23 @@ final class TabManager: ObservableObject {
     // MARK: - Session restore
 
     /// Restores the tabs of the last normal session at launch, so browsing
-    /// never starts fresh. Incognito never saves: nothing is written while it
-    /// is on, so it cannot change what gets restored.
+    /// never starts fresh. The saved tab list is stored sealed by SecureVault;
+    /// lists written by older builds in plain text are read once, re-saved
+    /// encrypted and removed. Incognito never saves: nothing is written while
+    /// it is on, so it cannot change what gets restored.
     private func restoreSession() {
-        let urls = (defaults.stringArray(forKey: Keys.savedTabs) ?? [])
+        var savedURLStrings: [String] = []
+        if let sealed = defaults.data(forKey: Keys.savedTabsVault),
+           let opened = SecureVault.openJSON(sealed) as? [String] {
+            savedURLStrings = opened
+        } else if let legacy = defaults.stringArray(forKey: Keys.savedTabs) {
+            savedURLStrings = legacy
+        }
+        // The plain-text list is never kept: whatever was found is rewritten
+        // under the vault key by saveSession on the next page load, and the
+        // legacy entry is dropped here.
+        defaults.removeObject(forKey: Keys.savedTabs)
+        let urls = savedURLStrings
             .compactMap(URL.init(string:))
             .filter { $0.scheme == "http" || $0.scheme == "https" }
         guard !urls.isEmpty else {
@@ -335,17 +348,23 @@ final class TabManager: ObservableObject {
             return
         }
         for url in urls { addTab(url: url) }
+        if !savedURLStrings.isEmpty { saveSession() }
     }
 
-    /// Remembers the current tabs so the next launch can restore them. Never
-    /// called while incognito is on — that session saves nothing.
+    /// Remembers the current tabs so the next launch can restore them. Only
+    /// the encrypted form is written: SecureVault seals the URL list with the
+    /// app's Keychain key, so nothing on disk names the sites. Never called
+    /// while incognito is on — that session saves nothing.
     private func saveSession() {
         guard !isIncognito, CustomizationStore.shared.keepCookies else { return }
         let urls = tabs.compactMap { $0.model.displayedURL?.absoluteString }
-        defaults.set(urls, forKey: Keys.savedTabs)
+        guard let sealed = SecureVault.sealJSON(urls) else { return }
+        defaults.set(sealed, forKey: Keys.savedTabsVault)
+        defaults.removeObject(forKey: Keys.savedTabs)
     }
 
     private enum Keys {
+        static let savedTabsVault = "session.savedTabs.vault"
         static let savedTabs = "session.savedTabs"
     }
 

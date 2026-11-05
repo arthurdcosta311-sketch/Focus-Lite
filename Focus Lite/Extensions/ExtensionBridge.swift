@@ -217,16 +217,23 @@ final class ExtensionBridge: NSObject, WKScriptMessageHandler {
 
     private func storageKey(_ ext: String) -> String { "focus.ext.storage." + ext }
 
+    /// Extension storage is sealed with the app's Keychain key before it
+    /// reaches disk: whatever an extension keeps — including URLs it has
+    /// seen — is ciphertext in UserDefaults. Blobs written before the vault
+    /// existed were plain JSON; they are read once and re-saved encrypted the
+    /// next time the extension writes.
     private func loadStorage(_ ext: String) -> [String: Any] {
-        guard let data = UserDefaults.standard.data(forKey: storageKey(ext)),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
-        return object
+        guard let data = UserDefaults.standard.data(forKey: storageKey(ext)) else { return [:] }
+        if let sealed = SecureVault.openJSON(data) as? [String: Any] {
+            return sealed
+        }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
     }
 
     private func saveStorage(_ ext: String, _ storage: [String: Any]) {
-        if let data = try? JSONSerialization.data(withJSONObject: storage) {
-            UserDefaults.standard.set(data, forKey: storageKey(ext))
-        }
+        guard let plain = try? JSONSerialization.data(withJSONObject: storage),
+              let sealed = SecureVault.seal(plain) else { return }
+        UserDefaults.standard.set(sealed, forKey: storageKey(ext))
     }
 
     private func handleStorageGet(ext: String, body: [String: Any], ticket: String, in webView: WKWebView?) {

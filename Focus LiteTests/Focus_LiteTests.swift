@@ -177,6 +177,23 @@ struct Focus_LiteTests {
         #expect(BrowserModel.siteURL(for: "localhost") == nil)
     }
 
+    /// Everything persisted about browsing — saved tabs, extension storage —
+    /// goes through SecureVault: a Keychain-held AES-GCM key only this app
+    /// can use. The sealed blob must not resemble the plain list, and it
+    /// must refuse to open once tampered with.
+    @Test func secureVaultSealsAndReopensPersistedData() throws {
+        let payload = ["https://example.com/one", "https://other.org/two"]
+
+        let sealed = try #require(SecureVault.sealJSON(payload))
+        let plain = try #require(JSONSerialization.data(withJSONObject: payload))
+        #expect(sealed != plain)
+        #expect(SecureVault.openJSON(sealed) as? [String] == payload)
+
+        let tampered = sealed.dropLast()
+        #expect(SecureVault.openJSON(Data(tampered)) == nil)
+        #expect(SecureVault.openJSON(Data("not a vault blob".utf8)) == nil)
+    }
+
     /// The alternate icon only works when the build declares it: the asset
     /// catalog compiler must include the Minimal set, or the car never
     /// contains it and setAlternateIconName fails at runtime.
