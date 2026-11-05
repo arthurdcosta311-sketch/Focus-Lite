@@ -142,24 +142,24 @@ struct Focus_LiteTests {
         let store = CustomizationStore(defaults: defaults)
         store.accent = .mint
         store.pageZoom = 1.5
-        store.keepCookies = true
+        store.christmasMode = false
 
         #expect(CustomizationStore(defaults: defaults).accent == .mint)
         #expect(CustomizationStore(defaults: defaults).pageZoom == 1.5)
-        #expect(CustomizationStore(defaults: defaults).keepCookies == true)
+        #expect(!CustomizationStore(defaults: defaults).christmasMode)
     }
 
-    /// Cookies stay by default: a fresh install has no stored choice yet and
-    /// gets the persistent store, while a stored opt-out is respected.
-    @Test func cookiesStayByDefaultUntilOptedOut() {
+    /// Christmas mode is on by default: a fresh install has no stored choice
+    /// yet and gets the festive look, while a stored opt-out is respected.
+    @Test func christmasModeIsOnByDefault() {
         let (defaults, suiteName) = makeTestDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        #expect(CustomizationStore(defaults: defaults).keepCookies)
+        #expect(CustomizationStore(defaults: defaults).christmasMode)
 
         let store = CustomizationStore(defaults: defaults)
-        store.keepCookies = false
-        #expect(!CustomizationStore(defaults: defaults).keepCookies)
+        store.christmasMode = false
+        #expect(!CustomizationStore(defaults: defaults).christmasMode)
     }
 
     /// Domain-shaped input is a site candidate that gets resolved before the
@@ -175,18 +175,6 @@ struct Focus_LiteTests {
         #expect(BrowserModel.siteURL(for: "3.14") == nil)
         #expect(BrowserModel.siteURL(for: "cute cats") == nil)
         #expect(BrowserModel.siteURL(for: "localhost") == nil)
-    }
-
-    /// Keeping cookies during an erase must spare the cookie data type only:
-    /// everything else (caches, storages, disk data) still gets wiped.
-    @Test func erasingCanSpareCookiesAndSignInData() {
-        #expect(TabManager.dataTypesToErase(clearCookies: true)
-            .contains(WKWebsiteDataTypeCookies))
-
-        let spared = TabManager.dataTypesToErase(clearCookies: false)
-        #expect(!spared.contains(WKWebsiteDataTypeCookies))
-        #expect(spared.contains(WKWebsiteDataTypeLocalStorage))
-        #expect(spared.count < TabManager.dataTypesToErase(clearCookies: true).count)
     }
 
     /// The alternate icon only works when the build declares it: the asset

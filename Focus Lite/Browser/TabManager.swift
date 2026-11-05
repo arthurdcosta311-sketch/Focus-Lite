@@ -18,7 +18,7 @@ final class Tab: Identifiable {
     }
 }
 
-/// Owns the open tabs, the shared ephemeral data store they browse with, and
+/// Owns the open tabs, the shared data store they browse with, and
 /// the session-level state: incognito mode, stats and toasts.
 final class TabManager: ObservableObject {
     @Published private(set) var tabs: [Tab] = []
@@ -40,12 +40,12 @@ final class TabManager: ObservableObject {
     /// user decides whether they are cleared along with the history.
     @Published var showEraseConfirmation = false
 
-    /// All tabs browse with one shared store. By default it is ephemeral,
-    /// like a normal browser's private window. With "keep cookies" on (and
-    /// outside incognito mode) the default persistent store is used instead,
-    /// so cookies and website sign-ins survive erases and relaunches.
-    private var dataStore: WKWebsiteDataStore = .nonPersistent()
+    /// All tabs browse with one shared store: the persistent default outside
+    /// incognito — history, sign-ins and site data survive relaunches — and an
+    /// ephemeral store in incognito, where nothing is saved.
+    private var dataStore: WKWebsiteDataStore = .default()
     private var confirmEraseFromSwitcher = false
+    private let defaults = UserDefaults.standard
     private var cancellables: Set<AnyCancellable> = []
     private var toastWorkItem: DispatchWorkItem?
     private var toastActionHost: String?
@@ -60,9 +60,13 @@ final class TabManager: ObservableObject {
         popupBlockerEnabled = PopupBlocker.isEnabled()
         dataStore = freshDataStore()
         observeCustomization()
-        addTab()
+        restoreSession()
     }
 
+    /// With "Keep cookies and sign-ins" on (the default), normal browsing
+    /// uses the persistent store, so history, sign-ins and site data survive
+    /// relaunches; with it off, and always in incognito, browsing uses a
+    /// throwaway store nothing is saved to.
     private func freshDataStore() -> WKWebsiteDataStore {
         if CustomizationStore.shared.keepCookies && !isIncognito {
             return .default()
@@ -93,9 +97,12 @@ final class TabManager: ObservableObject {
     // MARK: - Tabs
 
     @discardableResult
-    func addTab() -> Tab {
+    func addTab(url: URL? = nil) -> Tab {
         let tab = Tab(model: BrowserModel(dataStore: dataStore))
-        tab.model.onPageLoaded = { [weak self] in self?.pagesVisited += 1 }
+        tab.model.onPageLoaded = { [weak self] in
+            self?.pagesVisited += 1
+            self?.saveSession()
+        }
         tab.model.onPopupBlocked = { [weak self] host in self?.notePopupBlocked(from: host) }
         tab.model.shouldBlockPopup = { [weak self] host, destinationURL, navigationType in
             guard let self else { return true }
@@ -109,10 +116,13 @@ final class TabManager: ObservableObject {
         }
         tabs.append(tab)
         activeTabID = tab.id
-        if let homepage = CustomizationStore.shared.homepageURL() {
+        if let url {
+            tab.model.load(url.absoluteString)
+        } else if let homepage = CustomizationStore.shared.homepageURL() {
             tab.model.load(homepage.absoluteString)
         }
         BrowserLogStore.shared.record("New tab opened")
+        saveSession()
         return tab
     }
 
@@ -173,6 +183,7 @@ final class TabManager: ObservableObject {
             activeTabID = tabs[min(index, tabs.count - 1)].id
         }
         captureTabPreviews()
+        saveSession()
     }
 
     /// Captures small thumbnails for at most four loaded tabs, with one
@@ -215,15 +226,27 @@ final class TabManager: ObservableObject {
         }
     }
 
+    /// Closes every tab and continues in one fresh one. Unlike an erase,
+    /// this keeps the browsing data — cookies, caches and site storage stay,
+    /// so the session itself is not wiped; only the tabs and their page
+    /// history go.
+    func closeAll() {
+        BrowserLogStore.shared.record("All tabs closed")
+        clearTabPreviews()
+        tabs.removeAll()
+        addTab()
+        saveSession()
+        showToast("All tabs closed", symbol: "xmark.square")
+    }
+
     func refreshAllExtensions() {
         tabs.forEach { $0.model.refreshExtensions() }
     }
 
     // MARK: - Session
 
-    /// Entry point for every erase button. Erasing always asks first: with
-    /// cookies kept, whether to clear them along with the history; with them
-    /// off, whether to start keeping them instead.
+    /// Entry point for every erase button. Erasing always asks first, since
+    /// it wipes saved browsing data along with the open tabs.
     func requestErase() {
         confirmEraseFromSwitcher = showTabSwitcher
         showEraseConfirmation = true
@@ -296,6 +319,34 @@ final class TabManager: ObservableObject {
                   ? "Cookies and sign-ins now stay on this device"
                   : "Cookies now die with every session",
                   symbol: "lock.shield")
+    }
+
+    // MARK: - Session restore
+
+    /// Restores the tabs of the last normal session at launch, so browsing
+    /// never starts fresh. Incognito never saves: nothing is written while it
+    /// is on, so it cannot change what gets restored.
+    private func restoreSession() {
+        let urls = (defaults.stringArray(forKey: Keys.savedTabs) ?? [])
+            .compactMap(URL.init(string:))
+            .filter { $0.scheme == "http" || $0.scheme == "https" }
+        guard !urls.isEmpty else {
+            addTab()
+            return
+        }
+        for url in urls { addTab(url: url) }
+    }
+
+    /// Remembers the current tabs so the next launch can restore them. Never
+    /// called while incognito is on — that session saves nothing.
+    private func saveSession() {
+        guard !isIncognito, CustomizationStore.shared.keepCookies else { return }
+        let urls = tabs.compactMap { $0.model.displayedURL?.absoluteString }
+        defaults.set(urls, forKey: Keys.savedTabs)
+    }
+
+    private enum Keys {
+        static let savedTabs = "session.savedTabs"
     }
 
     private func showToast(_ text: String, symbol: String, actionTitle: String? = nil,

@@ -16,6 +16,10 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var vpnPassword = ""
     @State private var activeIcon: String? = UIApplication.shared.alternateIconName
+    /// The erase confirmation is presented with the sheet's own state: the
+    /// manager's flag also drives a dialog behind this sheet, and the
+    /// conflicting presentation stopped the dialog from ever appearing here.
+    @State private var showEraseConfirmation = false
 
     private var vpnFieldsLocked: Bool {
         switch vpnManager.connectionStatus {
@@ -101,6 +105,8 @@ struct SettingsSheet: View {
 
                     Toggle("Minimalistic mode", isOn: $customization.minimalisticMode)
 
+                    Toggle("Christmas mode", isOn: $customization.christmasMode)
+
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text("Page zoom")
@@ -114,7 +120,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Customize")
                 } footer: {
-                    Text("The accent colors the interface, the engine the address bar sends searches to, and the zoom of every page. The homepage opens in tabs created afterwards. A custom search template is an http(s) URL containing %s where the search term goes. Focus Search is Focus Lite's own engine and the default: it loads a classic results page with Web and Images tabs right in the tab, and its optional domain verification uses the encrypted DNS resolver chosen in Privacy. Minimalistic mode hides the start-page shortcuts and the incognito and erase buttons — those stay available in Settings. These choices are saved on this device.")
+                    Text("The accent colors the interface, the engine the address bar sends searches to, and the zoom of every page. The homepage opens in tabs created afterwards. A custom search template is an http(s) URL containing %s where the search term goes. Focus Search is Focus Lite's own engine and the default: it loads a classic results page with Web and Images tabs right in the tab, and its optional domain verification uses the encrypted DNS resolver chosen in Privacy. Minimalistic mode hides the start-page shortcuts and the incognito and erase buttons — those stay available in Settings. Christmas mode (on by default) dresses the interface in pine green with falling snow for the season. These choices are saved on this device.")
                 }
 
                 Section {
@@ -175,7 +181,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Privacy")
                 } footer: {
-                    Text("Incognito tints the interface and hides page content in the app switcher; switching modes wipes the session. Pop-ups from script-opened windows are blocked by default, while tapped links stay in the current tab. Keep cookies and sign-ins is on by default so website logins survive erases and relaunches on this device; erasing always asks first whether to clear them too, and you can turn keeping off entirely. Encrypted DNS protects lookups from the local network, but the resolver can see them; it is not a VPN.")
+                    Text("Incognito tints the interface and hides page content in the app switcher; switching modes wipes the session. Pop-ups from script-opened windows are blocked by default, while tapped links stay in the current tab. Keep cookies and sign-ins is on by default, so browsing outside incognito is saved on this device and website logins survive erases and relaunches; erasing always asks first whether to clear them too, and you can turn keeping off entirely. Incognito never saves anything. Encrypted DNS protects lookups from the local network, but the resolver can see them; it is not a VPN.")
                 }
 
                 if !manager.allowedPopupSites.isEmpty {
@@ -263,7 +269,7 @@ struct SettingsSheet: View {
                     LabeledRow("Pages loaded", "\(manager.pagesVisited)")
                     LabeledRow("Erasures", "\(manager.erasures)")
                     Button(role: .destructive) {
-                        manager.requestErase()
+                        showEraseConfirmation = true
                     } label: {
                         Label("Erase browsing data now", systemImage: "trash")
                     }
@@ -276,10 +282,32 @@ struct SettingsSheet: View {
                 BrowserLogSettingsSection()
 
                 Section("About") {
-                    LabeledRow("Version", "3.2")
+                    LabeledRow("Version", "3.6")
                     Text("Focus Lite blocks known trackers with WebKit content rules, keeps the data store ephemeral, browses in tabs with a dedicated iPad layout, and runs Chrome-style extensions through a lightweight WebExtensions bridge.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+
+                Section("Developers note") {
+                    Text("I like to code stuff because I feel little interest fot stock ios for it's a little flat and unpleasent I just see everyone making cool stuff for it codding cool PoCs and just wipping the floor with the sandbox it just makes me think woa I want to do that once I get skilled enough to apple better watch out")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section {
+                    HStack(spacing: 4) {
+                        Spacer()
+                        Text("made with")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "heart.fill")
+                            .font(.caption2)
+                            .foregroundStyle(Color.pink)
+                        Text("by arthurdcosta311-sketch")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
                 }
             }
             .navigationTitle("Settings")
@@ -293,7 +321,7 @@ struct SettingsSheet: View {
                 CustomizationStore.shared.keepCookies
                     ? "Clear cookies and sign-ins too?"
                     : "Erase browsing data?",
-                isPresented: $manager.showEraseConfirmation,
+                isPresented: $showEraseConfirmation,
                 titleVisibility: .visible
             ) {
                 if CustomizationStore.shared.keepCookies {
