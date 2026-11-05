@@ -7,18 +7,10 @@
 	objects = {
 
 /* Begin PBXContainerItemProxy section */
-		0A0000000000000000000021 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 0A0000000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 0A0000000000000000000006;
-			remoteInfo = "Focus Lite";
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		0A0000000000000000000003 /* Focus Lite.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Focus Lite.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		0A0000000000000000000023 /* Focus LiteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Focus LiteTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		C7C145D31D030C32BA3FC2CA /* Focus Lite.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "Focus Lite.entitlements"; path = "Focus Lite/Focus Lite.entitlements"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -41,22 +33,10 @@
 			path = "Focus Lite";
 			sourceTree = "<group>";
 		};
-		0A0000000000000000000025 /* Focus LiteTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Focus LiteTests";
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		0A0000000000000000000008 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		0A0000000000000000000028 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -70,7 +50,6 @@
 			isa = PBXGroup;
 			children = (
 				0A0000000000000000000005 /* Focus Lite */,
-				0A0000000000000000000025 /* Focus LiteTests */,
 				0A0000000000000000000004 /* Products */,
 				C7C145D31D030C32BA3FC2CA /* Focus Lite.entitlements */,
 			);
@@ -80,7 +59,6 @@
 			isa = PBXGroup;
 			children = (
 				0A0000000000000000000003 /* Focus Lite.app */,
-				0A0000000000000000000023 /* Focus LiteTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -110,29 +88,6 @@
 			productReference = 0A0000000000000000000003 /* Focus Lite.app */;
 			productType = "com.apple.product-type.application";
 		};
-		0A0000000000000000000026 /* Focus LiteTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 0A000000000000000000002E /* Build configuration list for PBXNativeTarget "Focus LiteTests" */;
-			buildPhases = (
-				0A0000000000000000000027 /* Sources */,
-				0A0000000000000000000028 /* Frameworks */,
-				0A0000000000000000000029 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				0A0000000000000000000022 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				0A0000000000000000000025 /* Focus LiteTests */,
-			);
-			name = "Focus LiteTests";
-			packageProductDependencies = (
-			);
-			productName = "Focus LiteTests";
-			productReference = 0A0000000000000000000023 /* Focus LiteTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -145,10 +100,6 @@
 				TargetAttributes = {
 					0A0000000000000000000006 = {
 						CreatedOnToolsVersion = 26.0;
-					};
-					0A0000000000000000000026 = {
-						CreatedOnToolsVersion = 26.0;
-						TestTargetID = 0A0000000000000000000006;
 					};
 				};
 			};
@@ -167,20 +118,12 @@
 			projectRoot = "";
 			targets = (
 				0A0000000000000000000006 /* Focus Lite */,
-				0A0000000000000000000026 /* Focus LiteTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		0A0000000000000000000009 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		0A0000000000000000000029 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -197,21 +140,9 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		0A0000000000000000000027 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		0A0000000000000000000022 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 0A0000000000000000000006 /* Focus Lite */;
-			targetProxy = 0A0000000000000000000021 /* PBXContainerItemProxy */;
-		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -404,42 +335,6 @@
 			};
 			name = Release;
 		};
-		0A000000000000000000002F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.organizationName.Focus-LiteTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Focus Lite.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Focus Lite";
-			};
-			name = Debug;
-		};
-		0A0000000000000000000030 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.organizationName.Focus-LiteTests";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Focus Lite.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Focus Lite";
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -457,15 +352,6 @@
 			buildConfigurations = (
 				0A000000000000000000000F /* Debug */,
 				0A0000000000000000000010 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		0A000000000000000000002E /* Build configuration list for PBXNativeTarget "Focus LiteTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				0A000000000000000000002F /* Debug */,
-				0A0000000000000000000030 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
