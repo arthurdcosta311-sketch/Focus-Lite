@@ -275,6 +275,28 @@ final class BrowserModel: NSObject, ObservableObject {
         return lastTwo
     }
 
+    /// Words scam pages' own URLs give away: scareware ("10 viruses found —
+    /// clean now") and prize pages announce themselves in the host, path or
+    /// query. Matching is on the whole URL, so a redirect into any of these
+    /// is refused; a user-tapped link to one is not.
+    private static let fishyPhrases: Set<String> = [
+        "virus", "malware", "scan-now", "virus-scan", "quickscan",
+        "cleannow", "clean-now", "cleanmy", "device-clean",
+        "battery-damaged", "batterylow", "battery-drain",
+        "prize", "winner", "youwon", "you-won", "congratulations",
+        "congrats", "luckydraw", "lucky-draw", "giveaway",
+        "hacked", "device-damaged", "phone-damaged", "iphone-damaged",
+        "iplogged", "you-have-been-selected", "claimyourprize", "claim-now",
+    ]
+
+    /// Whether a destination URL looks like a scareware or prize-scam page.
+    static func looksFishy(_ url: URL) -> Bool {
+        let text = url.absoluteString.lowercased()
+        // "coronavirus" contains "virus": public-health pages are not scams.
+        guard !text.contains("coronavirus") else { return false }
+        return fishyPhrases.contains { text.contains($0) }
+    }
+
     private func navigate(to url: URL) {
         // The address bar shows the full URL of the page being opened.
         addressText = url.absoluteString
@@ -548,19 +570,21 @@ extension BrowserModel: WKNavigationDelegate, WKUIDelegate {
             return
         }
         // Redirects — server hops, JavaScript or meta-refresh, anything that
-        // navigates without a user tap — only continue when they stay on the
-        // site the tab is already on or a related domain. Main-frame loads
-        // only; the page's own images and scripts are never touched.
+        // navigates without a user tap — are refused when they leave the site
+        // the tab is already on for a different domain whose URL smells like
+        // a scam ("10 viruses found", prize and scareware pages). Redirects
+        // within the same site or a related domain always pass, and the
+        // page's own images and scripts are never touched.
         if webView === self.webView,
            navigationAction.targetFrame?.isMainFrame == true,
            navigationAction.navigationType == .other {
             if isUserInitiatedNavigation {
                 isUserInitiatedNavigation = false
             } else if let currentPage = webView.url ?? displayedURL,
-                      let destination = url.host, !destination.isEmpty,
-                      !Self.isSameOrRelatedSite(currentPage, url) {
+                      !Self.isSameOrRelatedSite(currentPage, url),
+                      Self.looksFishy(url) {
                 decisionHandler(.cancel)
-                BrowserLogStore.shared.record("Cross-site redirect blocked · \(destination)")
+                BrowserLogStore.shared.record("Fishy redirect blocked · \(url.host ?? "unknown host")")
                 return
             }
         }
