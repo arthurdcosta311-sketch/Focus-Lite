@@ -106,18 +106,25 @@ final class CustomizationStore: ObservableObject {
     @Published var minimalisticMode: Bool {
         didSet { defaults.set(minimalisticMode, forKey: Keys.minimalisticMode) }
     }
+    /// How far the iPhone bottom bar (the search bar and its buttons) has
+    /// been dragged up from its default position, in points. Saved so the
+    /// bar stays where the user left it in both normal and minimalistic
+    /// mode; 0 means the default spot at the bottom.
+    @Published var searchBarLift: Double {
+        didSet { defaults.set(searchBarLift, forKey: Keys.searchBarLift) }
+    }
+    /// Festive seasonal look: a pine-green night, falling snow on the start
+    /// screen and tab switcher, and a holiday greeting. A look only — nothing
+    /// about browsing behavior changes. On by default; users who turn it off
+    /// stay off.
+    @Published var christmasMode: Bool {
+        didSet { defaults.set(christmasMode, forKey: Keys.christmasMode) }
+    }
     /// Focus Search's optional DNS check for typed domains. Off by default:
     /// plenty of small and open-source sites aren't registered with the big
     /// public resolvers, so verification is only for people who want it.
     @Published var verifyDomains: Bool {
         didSet { defaults.set(verifyDomains, forKey: Keys.verifyDomains) }
-    }
-    /// When on (the default), cookies and website sign-ins live in the
-    /// persistent store and survive erases (unless the erase prompt clears
-    /// them too) and relaunches. Turning it off returns to fully ephemeral
-    /// browsing, where cookies die with every session.
-    @Published var keepCookies: Bool {
-        didSet { defaults.set(keepCookies, forKey: Keys.keepCookies) }
     }
 
     private let defaults: UserDefaults
@@ -131,8 +138,9 @@ final class CustomizationStore: ObservableObject {
         homepageText = defaults.string(forKey: Keys.homepageText) ?? ""
         pageZoom = defaults.object(forKey: Keys.pageZoom) as? Double ?? 1.0
         minimalisticMode = defaults.bool(forKey: Keys.minimalisticMode)
+        searchBarLift = defaults.object(forKey: Keys.searchBarLift) as? Double ?? 0
+        christmasMode = defaults.object(forKey: Keys.christmasMode) as? Bool ?? true
         verifyDomains = defaults.bool(forKey: Keys.verifyDomains)
-        keepCookies = defaults.object(forKey: Keys.keepCookies) as? Bool ?? true
     }
 
     private enum Keys {
@@ -143,8 +151,9 @@ final class CustomizationStore: ObservableObject {
         static let homepageText = "customization.homepageText"
         static let pageZoom = "customization.pageZoom"
         static let minimalisticMode = "customization.minimalisticMode"
+        static let searchBarLift = "customization.searchBarLift"
+        static let christmasMode = "customization.christmasMode"
         static let verifyDomains = "customization.verifyDomains"
-        static let keepCookies = "customization.keepCookies"
     }
 
     var accentColor: Color { accent.color }

@@ -5,10 +5,11 @@ lightweight engine that runs **Chrome-style extensions**.
 
 ## What it does
 
-- **Private by default** — every session runs in an ephemeral data store, and the
-  big erase button wipes everything on demand. "Keep cookies and sign-ins" (on by
-  default, off in incognito) stores cookies persistently so website logins survive
-  erases and relaunches; erasing always asks first whether to clear them too.
+- **Browsing is saved** — normal browsing uses the persistent store, so
+  history, sign-ins and site data survive relaunches, and your open tabs are
+  restored when the app starts again. The big erase button wipes everything
+  on demand. **Incognito is the only mode that saves nothing**: it runs in an
+  ephemeral store and wipes the session when you enter or leave it.
 - **Incognito mode** — a toggle (glasses button in the bar, or in Settings) that tints
   the interface, shows an "Incognito" pill, hides page content in the app switcher, and
   wipes the session whenever you turn it on or off.
@@ -29,8 +30,10 @@ lightweight engine that runs **Chrome-style extensions**.
 - **Customizable** — pick the accent color, choose which engine the address bar
   sends searches to (or supply a custom search URL template), open an optional
   homepage in new tabs, set the page zoom, switch between the default and a
-  minimalist alternate app icon, and turn on Minimalistic mode to strip the
-  interface down to the essentials; all saved on device in Settings.
+  minimalist alternate app icon, turn on Minimalistic mode to strip the
+  interface down to the essentials, and turn off Christmas mode (on by
+  default) if you don't want the festive pine-green interface with falling
+  snow; all saved on device in Settings.
 - **Own search engine** — "Focus Search" is the default engine: searching
   loads a classic search-engine results page right in the tab — white page,
   colored wordmark, search box, Web and Images tabs, green breadcrumbs,

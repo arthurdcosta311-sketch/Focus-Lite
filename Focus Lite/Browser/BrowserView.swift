@@ -14,6 +14,12 @@ enum Theme {
     static let deepIndigo = Color(red: 0.09, green: 0.09, blue: 0.24)
     static let incognito = Color(red: 0.66, green: 0.5, blue: 0.95)
     static let incognitoDeep = Color(red: 0.04, green: 0.02, blue: 0.10)
+    static let christmasRed = Color(red: 0.85, green: 0.16, blue: 0.19)
+    static let pineNight = Color(red: 0.04, green: 0.16, blue: 0.11)
+    /// The app's night color: pine green in Christmas mode, deep indigo otherwise.
+    static var baseBackground: Color {
+        CustomizationStore.shared.christmasMode ? pineNight : deepIndigo
+    }
 }
 
 struct BrowserView: View {
@@ -30,7 +36,7 @@ struct BrowserView: View {
             }
         }
         .background(
-            (manager.isIncognito ? Theme.incognitoDeep : Theme.deepIndigo)
+            (manager.isIncognito ? Theme.incognitoDeep : Theme.baseBackground)
                 .ignoresSafeArea()
         )
         .overlay {
@@ -44,32 +50,16 @@ struct BrowserView: View {
             SettingsSheet(manager: manager)
         }
         .confirmationDialog(
-            CustomizationStore.shared.keepCookies
-                ? "Clear cookies and sign-ins too?"
-                : "Erase browsing data?",
+            "Erase browsing data?",
             isPresented: $manager.showEraseConfirmation,
             titleVisibility: .visible
         ) {
-            if CustomizationStore.shared.keepCookies {
-                Button("Erase everything, including cookies and sign-ins", role: .destructive) {
-                    manager.erase(clearCookies: true)
-                }
-                Button("Erase history only, keep cookies and sign-ins") {
-                    manager.erase(clearCookies: false)
-                }
-            } else {
-                Button("Erase everything", role: .destructive) {
-                    manager.erase(clearCookies: true)
-                }
-                Button("Turn on Keep cookies and sign-ins") {
-                    CustomizationStore.shared.keepCookies = true
-                }
+            Button("Erase everything", role: .destructive) {
+                manager.erase()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(CustomizationStore.shared.keepCookies
-                 ? "Cookies and website sign-ins are set to stay on this device. Keep them, or wipe them along with the history."
-                 : "Cookies and sign-ins die with every session. You can start keeping them instead.")
+            Text("Every tab closes and all browsing data saved on this device is wiped, including cookies and sign-ins.")
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -116,9 +106,13 @@ private struct StartOverlay: View {
     var body: some View {
         if model.isStart {
             ZStack {
-                (incognito ? Theme.incognitoDeep : Theme.deepIndigo)
+                (incognito ? Theme.incognitoDeep : Theme.baseBackground)
                     .ignoresSafeArea()
-                StartScreen(model: model)
+                StartScreen(model: model, incognito: incognito)
+                if CustomizationStore.shared.christmasMode && !incognito {
+                    Snowfall()
+                        .ignoresSafeArea()
+                }
             }
             .transition(.opacity)
         }
@@ -234,6 +228,31 @@ struct PhoneBrowserLayout: View {
     @FocusState private var addressFocused: Bool
     @State private var showTrackerTip = false
     @State private var availableWidth: CGFloat = 0
+    @State private var availableHeight: CGFloat = 0
+    /// The live drag offset while the user moves the bar; committed to the
+    /// customization store when the drag ends.
+    @State private var dragLift: CGFloat = 0
+
+    /// How far the bottom bar is lifted up from its default spot right now.
+    private var barLift: CGFloat {
+        max(0, min(CGFloat(CustomizationStore.shared.searchBarLift) + dragLift,
+                   maxBarLift))
+    }
+    /// Keeps the bar from covering the status bar area at the top.
+    private var maxBarLift: CGFloat { max(0, availableHeight - 190) }
+
+    private var moveBarGesture: some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                dragLift = -value.translation.height
+            }
+            .onEnded { _ in
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    CustomizationStore.shared.searchBarLift = Double(barLift)
+                }
+                dragLift = 0
+            }
+    }
 
     var body: some View {
         ZStack {
@@ -249,27 +268,29 @@ struct PhoneBrowserLayout: View {
                     IncognitoPill()
                 }
                 Spacer()
-                if showTrackerTip, let model = manager.activeTab?.model {
-                    TrackerTip(model: model)
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 8)
-                        .onTapGesture { withAnimation { showTrackerTip = false } }
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-                if let toastText = manager.toastText {
-                    StatusToast(text: toastText, symbol: manager.toastSymbol,
-                                actionTitle: manager.toastActionTitle) {
-                        manager.allowPopupsForLastBlockedSite()
+                VStack(spacing: 8) {
+                    if showTrackerTip, let model = manager.activeTab?.model {
+                        TrackerTip(model: model)
+                            .padding(.horizontal, 24)
+                            .onTapGesture { withAnimation { showTrackerTip = false } }
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
-                        .padding(.bottom, 8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    if let toastText = manager.toastText {
+                        StatusToast(text: toastText, symbol: manager.toastSymbol,
+                                    actionTitle: manager.toastActionTitle) {
+                            manager.allowPopupsForLastBlockedSite()
+                        }
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    if let model = manager.activeTab?.model {
+                        PhoneBottomBar(manager: manager, model: model,
+                                       showTrackerTip: $showTrackerTip,
+                                       addressFocused: $addressFocused,
+                                       isWide: availableWidth >= 432)
+                            .gesture(moveBarGesture)
+                    }
                 }
-                if let model = manager.activeTab?.model {
-                    PhoneBottomBar(manager: manager, model: model,
-                                   showTrackerTip: $showTrackerTip,
-                                   addressFocused: $addressFocused,
-                                   isWide: availableWidth >= 432)
-                }
+                .offset(y: -barLift)
             }
 
             if manager.showTabSwitcher {
@@ -287,6 +308,9 @@ struct PhoneBrowserLayout: View {
                 Color.clear
                     .onChange(of: geo.size.width, initial: true) { _, width in
                         availableWidth = width
+                    }
+                    .onChange(of: geo.size.height, initial: true) { _, height in
+                        availableHeight = height
                     }
             }
         )
@@ -433,9 +457,14 @@ private struct TabSwitcher: View {
 
     var body: some View {
         ZStack {
-            (manager.isIncognito ? Theme.incognitoDeep : Theme.deepIndigo)
+            (manager.isIncognito ? Theme.incognitoDeep : Theme.baseBackground)
                 .ignoresSafeArea()
                 .opacity(0.98)
+
+            if CustomizationStore.shared.christmasMode && !manager.isIncognito {
+                Snowfall()
+                    .ignoresSafeArea()
+            }
 
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
@@ -443,7 +472,7 @@ private struct TabSwitcher: View {
                         .font(.title3.bold())
                     Spacer()
                     Button(role: .destructive) {
-                        withAnimation { manager.requestErase() }
+                        withAnimation { manager.closeAll() }
                     } label: {
                         Text("Close All")
                             .font(.subheadline.weight(.semibold))
@@ -562,6 +591,7 @@ struct WebViewContainer: UIViewRepresentable {
 
 private struct StartScreen: View {
     @ObservedObject var model: BrowserModel
+    let incognito: Bool
 
     private let links: [(title: String, symbol: String, url: String)] = [
         ("Wikipedia", "book.fill", "https://en.wikipedia.org"),
@@ -572,16 +602,10 @@ private struct StartScreen: View {
 
     var body: some View {
         let minimal = CustomizationStore.shared.minimalisticMode
+        let christmas = CustomizationStore.shared.christmasMode
         VStack(spacing: 24) {
             Spacer()
-            ZStack {
-                Circle()
-                    .fill(Color.white.opacity(0.06))
-                    .frame(width: 100, height: 100)
-                Image(systemName: "shield.lefthalf.filled")
-                    .font(.system(size: 44, weight: .bold))
-                    .foregroundStyle(Theme.accent)
-            }
+            FestiveLogo()
             VStack(spacing: 6) {
                 Text("Focus Lite")
                     .font(.system(size: 32, weight: .bold, design: .rounded))
@@ -589,12 +613,19 @@ private struct StartScreen: View {
                     Text("A featherweight, private browser.")
                         .foregroundStyle(.secondary)
                 }
+                if christmas && !minimal {
+                    Text("Merry Christmas!")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.christmasRed)
+                }
             }
             VStack(spacing: 4) {
                 Text("Search or type an address in the bar below.")
                     .font(.subheadline)
                 if !minimal {
-                    Text("Every session starts fresh — nothing is saved.")
+                    Text(incognito
+                         ? "Nothing in an incognito session is saved — it wipes when you leave."
+                         : "Sign-ins and site data stay on this device until you erase them.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -627,6 +658,169 @@ private struct StartScreen: View {
         }
         .padding()
         .foregroundStyle(.white)
+    }
+}
+
+// MARK: - Festive logo & snow
+
+/// The in-app logo: the shield mark in full Christmas dress — a Santa hat,
+/// snow-capped pine sprigs, holly berries and snowflakes, matching the icon.
+struct FestiveLogo: View {
+    private let pine = Color(red: 0.16, green: 0.45, blue: 0.28)
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.06))
+                .frame(width: 132, height: 132)
+
+            PineSprig()
+                .stroke(pine, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .frame(width: 54, height: 44)
+                .rotationEffect(.degrees(-36))
+                .offset(x: -46, y: 36)
+
+            PineSprig()
+                .stroke(pine, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .frame(width: 54, height: 44)
+                .scaleEffect(x: -1)
+                .rotationEffect(.degrees(-36))
+                .offset(x: 46, y: 36)
+
+            ForEach([-46.0, 46.0], id: \.self) { x in
+                HStack(spacing: 3) {
+                    Circle().fill(Theme.christmasRed).frame(width: 7, height: 7)
+                    Circle().fill(Theme.christmasRed).frame(width: 7, height: 7)
+                    Circle().fill(Theme.christmasRed).frame(width: 7, height: 7)
+                }
+                .offset(x: x, y: 52)
+            }
+
+            Image(systemName: "shield.lefthalf.filled")
+                .font(.system(size: 46, weight: .bold))
+                .foregroundStyle(Theme.accent)
+                .overlay(alignment: .top) {
+                    SantaHat()
+                        .rotationEffect(.degrees(8), anchor: .bottom)
+                        .offset(x: 4, y: -24)
+                }
+
+            Image(systemName: "snowflake")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.75))
+                .offset(x: -56, y: -44)
+            Image(systemName: "snowflake")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+                .offset(x: 60, y: -32)
+        }
+        .frame(height: 132)
+    }
+}
+
+/// A pine sprig: a diagonal stem with needles, drawn as one stroked path.
+struct PineSprig: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width, h = rect.height
+        path.move(to: CGPoint(x: 0, y: h))
+        path.addLine(to: CGPoint(x: w, y: 0))
+        let needlePairs = 6
+        for step in 1...needlePairs {
+            let t = CGFloat(step) / CGFloat(needlePairs + 1)
+            let x = w * t, y = h * (1 - t)
+            path.move(to: CGPoint(x: x, y: y))
+            path.addLine(to: CGPoint(x: x + 10, y: y - 5))
+            path.move(to: CGPoint(x: x, y: y))
+            path.addLine(to: CGPoint(x: x - 4, y: y - 11))
+        }
+        return path
+    }
+}
+
+/// A small Santa hat drawn with shapes: red cap, white trim, pompom.
+/// Everything is laid out in one 48×33 frame so the pieces can't drift apart.
+struct SantaHat: View {
+    var body: some View {
+        ZStack {
+            SantaHatCap()
+                .fill(Theme.christmasRed)
+                .frame(width: 48, height: 33)
+            SantaHatTrim()
+                .stroke(.white, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .frame(width: 48, height: 33)
+            Circle()
+                .fill(.white)
+                .frame(width: 11, height: 11)
+                .offset(x: 18, y: -6)
+        }
+        .frame(width: 48, height: 33)
+    }
+}
+
+/// The cap: a smooth dome whose tip droops over to the right at (42, 10).
+/// All curves stay inside the 48×33 frame, so nothing is clipped or spiky.
+struct SantaHatCap: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + 1, y: rect.minY + 27))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + 22, y: rect.minY),
+            control: CGPoint(x: rect.minX + 8, y: rect.minY + 1)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + 42, y: rect.minY + 10),
+            control: CGPoint(x: rect.minX + 34, y: rect.minY + 1)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + 36, y: rect.minY + 27),
+            control: CGPoint(x: rect.minX + 42, y: rect.minY + 20)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// The trim: a white arc stroked across the cap's base, rising slightly in
+/// the middle so it hugs the dome and covers the base line.
+struct SantaHatTrim: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + 1, y: rect.minY + 30))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + 37, y: rect.minY + 30),
+            control: CGPoint(x: rect.minX + 19, y: rect.minY + 22)
+        )
+        return path
+    }
+}
+
+/// Gentle falling snow for Christmas mode, redrawn every frame with Canvas.
+struct Snowfall: View {
+    private let flakeCount = 60
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            Canvas { context, size in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                for index in 0..<flakeCount {
+                    let seed = Double(index)
+                    let baseX = (seed * 0.6180339887).truncatingRemainder(dividingBy: 1)
+                    let speed = 18 + (seed * 0.317).truncatingRemainder(dividingBy: 1) * 32
+                    let drift = sin(t * 0.5 + seed) * 9
+                    let travel = t * speed + seed * 173.0
+                    let y = travel.truncatingRemainder(dividingBy: size.height + 60) - 30
+                    let x = baseX * size.width + drift
+                    let radius = 1.2 + (seed * 0.271).truncatingRemainder(dividingBy: 1) * 2.2
+                    let opacity = 0.2 + (seed * 0.113).truncatingRemainder(dividingBy: 1) * 0.55
+                    let frame = CGRect(x: x - radius, y: y - radius,
+                                       width: radius * 2, height: radius * 2)
+                    context.fill(Path(ellipseIn: frame), with: .color(.white.opacity(opacity)))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
