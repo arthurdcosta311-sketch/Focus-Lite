@@ -495,8 +495,23 @@ extension BrowserModel: WKNavigationDelegate, WKUIDelegate {
     /// instead of navigating. Everything else loads normally.
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let url = navigationAction.request.url,
-              url.scheme == FocusSearchPage.scheme else {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+        // Over-the-air app installs and App Store links use custom schemes
+        // WebKit will not load: hand them to iOS instead. Tapping an
+        // itms-services:// link then brings up the system install prompt.
+        if url.scheme == "itms-services" || url.scheme == "itms-apps" {
+            decisionHandler(.cancel)
+            guard webView === self.webView else { return }
+            BrowserLogStore.shared.record(
+                url.scheme == "itms-services" ? "Opening over-the-air install" : "Opening App Store link"
+            )
+            UIApplication.shared.open(url)
+            return
+        }
+        guard url.scheme == FocusSearchPage.scheme else {
             decisionHandler(.allow)
             return
         }
