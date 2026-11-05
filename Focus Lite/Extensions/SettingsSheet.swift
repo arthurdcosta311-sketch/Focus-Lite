@@ -147,6 +147,10 @@ struct SettingsSheet: View {
                         Label("Block pop-ups", systemImage: "hand.raised")
                     }
 
+                    Toggle(isOn: $customization.keepCookies) {
+                        Label("Keep cookies and sign-ins", systemImage: "person.badge.key")
+                    }
+
                     Toggle(isOn: Binding(
                         get: { dnsManager.isEnabled },
                         set: { _ in dnsManager.toggle() }
@@ -177,7 +181,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Privacy")
                 } footer: {
-                    Text("Incognito tints the interface and hides page content in the app switcher; switching modes wipes the session. Pop-ups from script-opened windows are blocked by default, while tapped links stay in the current tab. Browsing outside incognito is saved on this device — sign-ins and site data survive relaunches — while incognito never saves anything, and erasing wipes it all. Encrypted DNS protects lookups from the local network, but the resolver can see them; it is not a VPN.")
+                    Text("Incognito tints the interface and hides page content in the app switcher; switching modes wipes the session. Pop-ups from script-opened windows are blocked by default, while tapped links stay in the current tab. Keep cookies and sign-ins is on by default, so browsing outside incognito is saved on this device and website logins survive erases and relaunches; erasing always asks first whether to clear them too, and you can turn keeping off entirely. Incognito never saves anything. Encrypted DNS protects lookups from the local network, but the resolver can see them; it is not a VPN.")
                 }
 
                 if !manager.allowedPopupSites.isEmpty {
@@ -292,16 +296,32 @@ struct SettingsSheet: View {
                 }
             }
             .confirmationDialog(
-                "Erase browsing data?",
+                CustomizationStore.shared.keepCookies
+                    ? "Clear cookies and sign-ins too?"
+                    : "Erase browsing data?",
                 isPresented: $showEraseConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Erase everything", role: .destructive) {
-                    manager.erase()
+                if CustomizationStore.shared.keepCookies {
+                    Button("Erase everything, including cookies and sign-ins", role: .destructive) {
+                        manager.erase(clearCookies: true)
+                    }
+                    Button("Erase history only, keep cookies and sign-ins") {
+                        manager.erase(clearCookies: false)
+                    }
+                } else {
+                    Button("Erase everything", role: .destructive) {
+                        manager.erase(clearCookies: true)
+                    }
+                    Button("Turn on Keep cookies and sign-ins") {
+                        CustomizationStore.shared.keepCookies = true
+                    }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Every tab closes and all browsing data saved on this device is wiped, including cookies and sign-ins.")
+                Text(CustomizationStore.shared.keepCookies
+                     ? "Cookies and website sign-ins are set to stay on this device. Keep them, or wipe them along with the history."
+                     : "Cookies and sign-ins die with every session. You can start keeping them instead.")
             }
         }
     }

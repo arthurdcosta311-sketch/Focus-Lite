@@ -106,6 +106,13 @@ final class CustomizationStore: ObservableObject {
     @Published var minimalisticMode: Bool {
         didSet { defaults.set(minimalisticMode, forKey: Keys.minimalisticMode) }
     }
+    /// Whether website cookies and sign-ins are kept. On (the default),
+    /// normal browsing uses the persistent store, so logins survive
+    /// erases that spare them and relaunches; off, every session is
+    /// ephemeral, like incognito.
+    @Published var keepCookies: Bool {
+        didSet { defaults.set(keepCookies, forKey: Keys.keepCookies) }
+    }
     /// How far the iPhone bottom bar (the search bar and its buttons) has
     /// been dragged up from its default position, in points. Saved so the
     /// bar stays where the user left it in both normal and minimalistic
@@ -138,6 +145,7 @@ final class CustomizationStore: ObservableObject {
         homepageText = defaults.string(forKey: Keys.homepageText) ?? ""
         pageZoom = defaults.object(forKey: Keys.pageZoom) as? Double ?? 1.0
         minimalisticMode = defaults.bool(forKey: Keys.minimalisticMode)
+        keepCookies = defaults.object(forKey: Keys.keepCookies) as? Bool ?? true
         searchBarLift = defaults.object(forKey: Keys.searchBarLift) as? Double ?? 0
         christmasMode = defaults.object(forKey: Keys.christmasMode) as? Bool ?? true
         verifyDomains = defaults.bool(forKey: Keys.verifyDomains)
@@ -151,6 +159,7 @@ final class CustomizationStore: ObservableObject {
         static let homepageText = "customization.homepageText"
         static let pageZoom = "customization.pageZoom"
         static let minimalisticMode = "customization.minimalisticMode"
+        static let keepCookies = "customization.keepCookies"
         static let searchBarLift = "customization.searchBarLift"
         static let christmasMode = "customization.christmasMode"
         static let verifyDomains = "customization.verifyDomains"

@@ -50,16 +50,32 @@ struct BrowserView: View {
             SettingsSheet(manager: manager)
         }
         .confirmationDialog(
-            "Erase browsing data?",
+            CustomizationStore.shared.keepCookies
+                ? "Clear cookies and sign-ins too?"
+                : "Erase browsing data?",
             isPresented: $manager.showEraseConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Erase everything", role: .destructive) {
-                manager.erase()
+            if CustomizationStore.shared.keepCookies {
+                Button("Erase everything, including cookies and sign-ins", role: .destructive) {
+                    manager.erase(clearCookies: true)
+                }
+                Button("Erase history only, keep cookies and sign-ins") {
+                    manager.erase(clearCookies: false)
+                }
+            } else {
+                Button("Erase everything", role: .destructive) {
+                    manager.erase(clearCookies: true)
+                }
+                Button("Turn on Keep cookies and sign-ins") {
+                    CustomizationStore.shared.keepCookies = true
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Every tab closes and all browsing data saved on this device is wiped, including cookies and sign-ins.")
+            Text(CustomizationStore.shared.keepCookies
+                 ? "Cookies and website sign-ins are set to stay on this device. Keep them, or wipe them along with the history."
+                 : "Cookies and sign-ins die with every session. You can start keeping them instead.")
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {

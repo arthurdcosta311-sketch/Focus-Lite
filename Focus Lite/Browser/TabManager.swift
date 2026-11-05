@@ -18,7 +18,7 @@ final class Tab: Identifiable {
     }
 }
 
-/// Owns the open tabs, the shared ephemeral data store they browse with, and
+/// Owns the open tabs, the shared data store they browse with, and
 /// the session-level state: incognito mode, stats and toasts.
 final class TabManager: ObservableObject {
     @Published private(set) var tabs: [Tab] = []
@@ -63,11 +63,15 @@ final class TabManager: ObservableObject {
         restoreSession()
     }
 
-    /// Normal browsing always uses the persistent store, so history,
-    /// sign-ins and site data survive relaunches. Incognito is the only mode
-    /// that browses with a throwaway store.
+    /// With "Keep cookies and sign-ins" on (the default), normal browsing
+    /// uses the persistent store, so history, sign-ins and site data survive
+    /// relaunches; with it off, and always in incognito, browsing uses a
+    /// throwaway store nothing is saved to.
     private func freshDataStore() -> WKWebsiteDataStore {
-        isIncognito ? .nonPersistent() : .default()
+        if CustomizationStore.shared.keepCookies && !isIncognito {
+            return .default()
+        }
+        return .nonPersistent()
     }
 
     /// Keeps every view that reads Theme.accent in step with customization
@@ -82,6 +86,11 @@ final class TabManager: ObservableObject {
             .sink { [weak self] zoom in
                 self?.tabs.forEach { $0.model.webView.pageZoom = CGFloat(zoom) }
             }
+            .store(in: &cancellables)
+        CustomizationStore.shared.$keepCookies
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.resetSessionForStoreChange() }
             .store(in: &cancellables)
     }
 
@@ -244,11 +253,10 @@ final class TabManager: ObservableObject {
     }
 
     /// Focus-style erase: drop every tab and wipe the shared data store,
-    /// cookies and sign-ins included — the one way back to a truly fresh
-    /// start, since normal browsing otherwise keeps everything.
-    func erase() {
+    /// sparing the persistent cookies and sign-ins when asked to.
+    func erase(clearCookies: Bool = true) {
         dataStore.removeData(
-            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            ofTypes: Self.dataTypesToErase(clearCookies: clearCookies),
             modifiedSince: .distantPast,
             completionHandler: {}
         )
@@ -261,7 +269,20 @@ final class TabManager: ObservableObject {
             confirmEraseFromSwitcher = false
             showTabSwitcher = false
         }
-        showToast("Browsing data erased", symbol: "checkmark.circle.fill")
+        showToast(clearCookies || !CustomizationStore.shared.keepCookies
+                  ? "Browsing data erased"
+                  : "History erased — cookies kept",
+                  symbol: "checkmark.circle.fill")
+    }
+
+    /// The website data types an erase removes. Keeping cookies means only
+    /// clearing everything else — caches, storages, disk data — not sign-ins.
+    static func dataTypesToErase(clearCookies: Bool) -> Set<String> {
+        if clearCookies {
+            return WKWebsiteDataStore.allWebsiteDataTypes()
+        }
+        return WKWebsiteDataStore.allWebsiteDataTypes()
+            .subtracting([WKWebsiteDataTypeCookies])
     }
 
     /// Toggles incognito mode. Either way the session is wiped: every tab is
@@ -286,6 +307,20 @@ final class TabManager: ObservableObject {
         toastActionTitle = nil
     }
 
+    /// Swapping between the ephemeral and persistent stores needs a fresh
+    /// session: every tab drops, and browsing continues in one new tab.
+    private func resetSessionForStoreChange() {
+        dataStore = freshDataStore()
+        clearTabPreviews()
+        tabs.removeAll()
+        resetBrowserSession()
+        addTab()
+        showToast(CustomizationStore.shared.keepCookies
+                  ? "Cookies and sign-ins now stay on this device"
+                  : "Cookies now die with every session",
+                  symbol: "lock.shield")
+    }
+
     // MARK: - Session restore
 
     /// Restores the tabs of the last normal session at launch, so browsing
@@ -305,7 +340,7 @@ final class TabManager: ObservableObject {
     /// Remembers the current tabs so the next launch can restore them. Never
     /// called while incognito is on — that session saves nothing.
     private func saveSession() {
-        guard !isIncognito else { return }
+        guard !isIncognito, CustomizationStore.shared.keepCookies else { return }
         let urls = tabs.compactMap { $0.model.displayedURL?.absoluteString }
         defaults.set(urls, forKey: Keys.savedTabs)
     }
