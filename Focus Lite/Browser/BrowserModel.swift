@@ -39,9 +39,15 @@ final class BrowserModel: NSObject, ObservableObject {
     init(dataStore: WKWebsiteDataStore = .nonPersistent()) {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore
-        // Videos stay inline where they are: never jump into
-        // picture-in-picture when the page scrolls or the app backgrounds.
-        configuration.allowsPictureInPictureMediaPlayback = false
+        // Videos play inline with the page's own controls instead of jumping
+        // into WebKit's native fullscreen player (the one with AirPlay).
+        // Fullscreen only happens when the site asks for it through the
+        // HTML5 fullscreen API.
+        configuration.allowsInlineMediaPlayback = true
+        configuration.preferences.isElementFullscreenEnabled = true
+        // Picture-in-picture is available from the video's own PiP button;
+        // nothing enters PiP automatically.
+        configuration.allowsPictureInPictureMediaPlayback = true
         let controller = WKUserContentController()
         configuration.userContentController = controller
         webView = WKWebView(frame: .zero, configuration: configuration)
